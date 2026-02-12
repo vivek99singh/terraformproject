@@ -1,14 +1,4 @@
-variable "resource_group_name" {
-  description = "The name of the resource group"
-  type        = string
-}
-
-variable "storage_account_name" {
-  description = "The name of the storage account"
-  type        = string
-}
-
 variable "location" {
-  description = "The Azure region"
-  type        = string
+  description = "Azure region for all resources."
+  default     = "South India"
 }
