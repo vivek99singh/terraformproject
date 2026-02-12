@@ -1,11 +1,19 @@
-module "storage_account" {
-  source              = "./modules/storage"
-  resource_group_name = azurerm_resource_group.storage_rg.name
-  storage_account_name = var.storage_account_name
+module "network" {
+  source              = "./modules/network"
+  resource_group_name = azurerm_resource_group.vm_resource_group.name
   location            = var.location
 }
 
-resource "azurerm_resource_group" "storage_rg" {
-  name     = var.resource_group_name
+module "vm" {
+  source              = "./modules/vm"
+  subnet_id           = module.network.subnet_id
+  public_ip_id        = module.network.public_ip_id
+  nsg_id              = module.network.nsg_id
+  resource_group_name = azurerm_resource_group.vm_resource_group.name
+  location            = var.location
+}
+
+resource "azurerm_resource_group" "vm_resource_group" {
+  name     = "rg-southindia-vm"
   location = var.location
 }

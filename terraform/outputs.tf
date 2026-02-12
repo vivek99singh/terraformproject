@@ -1,7 +1,28 @@
-output "storage_account_id" {
-  value = module.storage_account.storage_account_id
+output "vm_id" {
+  value = module.vm.vm_id
 }
 
-output "resource_group_id" {
-  value = azurerm_resource_group.storage_rg.id
+output "vm_name" {
+  value = module.vm.vm_name
+}
+
+output "nic_id" {
+  value = module.vm.nic_id
+}
+
+output "admin_password" {
+  value     = module.vm.admin_password
+  sensitive = true
+}
+
+output "subnet_id" {
+  value = module.network.subnet_id
+}
+
+output "nsg_id" {
+  value = module.network.nsg_id
+}
+
+output "public_ip_address" {
+  value = module.network.public_ip_address
 }
