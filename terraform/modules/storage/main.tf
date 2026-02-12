@@ -1,13 +1,14 @@
-resource "azurerm_storage_account" "storage_account" {
-  name                     = var.storage_account_name
+resource "azurerm_storage_account" "storage" {
+  name                     = "storsouthindia${random_string.storage_suffix.result}"
   resource_group_name      = var.resource_group_name
   location                 = var.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
-  is_hns_enabled           = true
+}
 
-  tags = {
-    Environment = "Production"
-    ManagedBy   = "Terraform"
-  }
+resource "random_string" "storage_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+  number  = false
 }
