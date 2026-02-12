@@ -1,26 +1,21 @@
 variable "location" {
-  description = "Azure region for all resources."
+  description = "The Azure region to deploy the resources"
   default     = "South India"
 }
 
 variable "address_space" {
-  description = "Address space for the Virtual Network."
+  description = "The address space for the VNet"
   default     = "10.0.0.0/16"
 }
 
 variable "subnet_prefix" {
-  description = "Address prefix for the subnet."
+  description = "The CIDR subnet prefix for the subnet"
   default     = "10.0.1.0/24"
 }
 
-variable "admin_username" {
-  description = "Admin username for the VM."
-  default     = "azureuser"
-}
-
-variable "admin_password" {
-  description = "Admin password for the VM."
-  default     = "ComplexPassword!23"
+variable "vm_size" {
+  description = "The size of the VM"
+  default     = "Standard_DS3_v2" # Corresponds to 4 cores and 16GB RAM
 }
 
 resource "azurerm_resource_group" "example_rg" {
@@ -89,13 +84,11 @@ resource "azurerm_linux_virtual_machine" "example_vm" {
   name                = "example-vm"
   resource_group_name = azurerm_resource_group.example_rg.name
   location            = var.location
-  size                = "Standard_DS3_v2" # Corresponds to 4 cores and 16GB RAM
-  admin_username      = var.admin_username
+  size                = var.vm_size
+  admin_username      = "adminuser"
   network_interface_ids = [
     azurerm_network_interface.example_nic.id,
   ]
-  admin_password      = var.admin_password
-  disable_password_authentication = false
 
   os_disk {
     caching              = "ReadWrite"
@@ -108,6 +101,8 @@ resource "azurerm_linux_virtual_machine" "example_vm" {
     sku       = "18.04-LTS"
     version   = "latest"
   }
+
+  disable_password_authentication = true
 }
 
 output "public_ip_address" {
