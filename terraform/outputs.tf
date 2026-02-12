@@ -1,7 +1,7 @@
-output "storage_account_id" {
-  value = module.storage_account.storage_account_id
+output "vm_public_ip_address" {
+  value = module.vm.public_ip_address
 }
 
-output "resource_group_id" {
-  value = azurerm_resource_group.storage_rg.id
+output "storage_account_primary_connection_string" {
+  value = module.storage.primary_connection_string
 }

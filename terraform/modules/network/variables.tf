@@ -3,5 +3,5 @@ variable "resource_group_name" {
 }
 
 variable "location" {
-  description = "The Azure region to deploy the storage account."
+  description = "The Azure region to deploy the network resources."
 }
