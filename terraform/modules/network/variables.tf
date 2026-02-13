@@ -13,13 +13,3 @@ variable "vnet_cidr" {
 variable "subnet_cidrs" {
   type = list(string)
 }
-
-variable "vm_size" {
-  type = string
-  default = "Standard_DS1_v2"
-}
-
-variable "admin_username" {
-  type = string
-  default = "VMadmin"
-}
