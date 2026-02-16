@@ -27,5 +27,11 @@ variable "admin_username" {
 }
 
 variable "boot_diagnostics_storage_account_uri" {
-  type = string
+  type        = string
+  description = "Storage account URI for boot diagnostics"
+}
+
+variable "environment" {
+  type    = string
+  default = "Dev"
 }
