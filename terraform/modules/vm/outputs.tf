@@ -1,9 +1,9 @@
 output "vm_id" {
-  value = azurerm_windows_virtual_machine.main.id
+  value = azurerm_windows_virtual_machine.main[0].id
 }
 
 output "vm_name" {
-  value = azurerm_windows_virtual_machine.main.name
+  value = azurerm_windows_virtual_machine.main[0].name
 }
 
 output "nic_id" {
