@@ -368,6 +368,11 @@ CRITICAL: Check specifications.osType to determine VM type:
 1. Resource Group (azurerm_resource_group)
 2. Virtual Network (azurerm_virtual_network) with CIDR from specifications.vnetCidr or default
 3. Subnet(s) (azurerm_subnet) - create multiple if specifications.subnetCidrs is an array
+   CRITICAL SUBNET NAMING: When using for_each with CIDR blocks:
+   - Use index as the key, NOT the CIDR value (CIDR contains "/" which is invalid in Azure names)
+   - CORRECT: for_each = { for idx, cidr in var.subnet_cidrs : idx => cidr }
+   - WRONG: for_each = toset(var.subnet_cidrs) # Uses CIDR as key
+   - Name format: subnet-0, subnet-1, etc. using the index key
 4. Network Security Group (azurerm_network_security_group) with basic rules
 5. Network Interface (azurerm_network_interface) connected to the subnet
 6. Public IP (azurerm_public_ip) if specifications.publicIp = true or external access needed
@@ -478,6 +483,10 @@ subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
 [Network module with:
 - azurerm_virtual_network using var.vnet_cidr
 - azurerm_subnet resources (one for each CIDR in var.subnet_cidrs) using count or for_each
+  CRITICAL: When using for_each with subnet_cidrs, use index as key, NOT the CIDR value
+  CORRECT: for_each = { for idx, cidr in var.subnet_cidrs : idx => cidr }
+  WRONG: for_each = toset(var.subnet_cidrs) # This uses CIDR as key which is invalid
+  Subnet name should be: "subnet-\${each.key}" or "subnet-\${each.key + 1}"
 - azurerm_network_security_group
 - azurerm_public_ip if needed
 DO NOT create storage account here!]
@@ -492,7 +501,9 @@ DO NOT create storage account here!]
 
 ### FILE: modules/network/outputs.tf
 [Network module outputs ONLY for resources in THIS module:
+- output "subnet_ids" { value = [for s in azurerm_subnet.main : s.id] } (if using for_each)
 - output "subnet_ids" { value = azurerm_subnet.main[*].id } (if using count)
+- output "subnet_id" { value = values(azurerm_subnet.main)[0].id } (first subnet, if using for_each)
 - output "nsg_id" { value = azurerm_network_security_group.main.id }
 - output "public_ip_id" { value = azurerm_public_ip.main.id } (if created)
 - output "public_ip_address" { value = azurerm_public_ip.main.ip_address } (if created)
