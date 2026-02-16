@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "main" {
-  name                = "nic"
+  name                = "${var.resource_group_name}-nic"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -12,29 +12,29 @@ resource "azurerm_network_interface" "main" {
 }
 
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "vm"
+  name                = "${var.resource_group_name}-vm"
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
   admin_username      = var.admin_username
   admin_password      = random_password.admin.result
-  network_interface_ids = [azurerm_network_interface.main.id]
-
+  network_interface_ids = [
+    azurerm_network_interface.main.id,
+  ]
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
   }
-
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
-    sku       = "2022-Datacenter"
+    sku       = "2019-Datacenter"
     version   = "latest"
   }
-
   boot_diagnostics {
     storage_account_uri = var.boot_diagnostics_storage_account_uri
   }
+  tags = var.tags
 }
 
 resource "random_password" "admin" {
@@ -44,12 +44,13 @@ resource "random_password" "admin" {
 }
 
 resource "azurerm_managed_disk" "additional" {
-  name                 = "additionaldisk"
+  name                 = "${var.resource_group_name}-additionaldisk"
   location             = var.location
   resource_group_name  = var.resource_group_name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
   disk_size_gb         = 256
+  tags                 = var.tags
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "additional" {
