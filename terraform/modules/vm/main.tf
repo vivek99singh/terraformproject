@@ -17,10 +17,12 @@ resource "azurerm_windows_virtual_machine" "main" {
   location            = var.location
   size                = var.vm_size
   admin_username      = var.admin_username
-  admin_password      = random_password.password.result
-  network_interface_ids = [azurerm_network_interface.main.id]
+  admin_password      = random_password.admin.result
+  network_interface_ids = [
+    azurerm_network_interface.main.id,
+  ]
   os_disk {
-    caching              = "ReadWrite"
+    caching           = "ReadWrite"
     storage_account_type = "Premium_LRS"
   }
   source_image_reference {
@@ -29,16 +31,16 @@ resource "azurerm_windows_virtual_machine" "main" {
     sku       = "2019-Datacenter"
     version   = "latest"
   }
+  tags = var.tags
+
   boot_diagnostics {
     storage_account_uri = var.boot_diagnostics_storage_account_uri
   }
-  tags = var.tags
 }
 
-resource "random_password" "password" {
-  length           = 16
-  special          = true
-  override_special = "_%@"
+resource "random_password" "admin" {
+  length  = 16
+  special = true
 }
 
 resource "azurerm_managed_disk" "additional" {

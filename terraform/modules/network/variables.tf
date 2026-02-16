@@ -1,24 +1,19 @@
 variable "resource_group_name" {
-  type        = string
-  description = "Name of the resource group"
+  type = string
 }
 
 variable "location" {
-  type        = string
-  description = "Azure region"
+  type = string
 }
 
 variable "vnet_cidr" {
-  type        = string
-  description = "CIDR block for VNet"
+  type = string
 }
 
 variable "subnet_cidrs" {
-  type        = list(string)
-  description = "List of CIDR blocks for subnets"
+  type = list(string)
 }
 
 variable "tags" {
-  type        = map(string)
-  description = "Tags to apply to all resources"
+  type = map(string)
 }

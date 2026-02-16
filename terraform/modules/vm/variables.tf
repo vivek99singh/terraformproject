@@ -1,41 +1,38 @@
 variable "resource_group_name" {
-  type        = string
-  description = "Name of the resource group"
+  type = string
 }
 
 variable "location" {
-  type        = string
-  description = "Azure region"
+  type = string
 }
 
 variable "subnet_id" {
-  type        = string
-  description = "ID of the subnet for the VM NIC"
+  type = string
 }
 
 variable "vm_size" {
-  type        = string
-  description = "Size of the VM"
+  type = string
 }
 
 variable "admin_username" {
-  type        = string
-  description = "Admin username for the VM"
+  type = string
 }
 
 variable "tags" {
-  type        = map(string)
-  description = "Tags to apply to all resources"
+  type = map(string)
 }
 
 variable "public_ip_id" {
-  type        = string
-  default     = null
-  description = "Public IP ID (optional, pass only if public IP is created)"
+  type    = string
+  default = null
+}
+
+variable "nsg_id" {
+  type    = string
+  default = null
 }
 
 variable "boot_diagnostics_storage_account_uri" {
-  type        = string
-  default     = null
-  description = "Storage account URI for boot diagnostics (optional, pass only if storage account is created)"
+  type    = string
+  default = null
 }
