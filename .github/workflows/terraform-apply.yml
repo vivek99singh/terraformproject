@@ -33,15 +33,244 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      - name: Check Backend State
+        id: check-state
+        run: |
+          echo "Checking if state file exists in backend..."
+          
+          # Get storage account key
+          ACCOUNT_KEY=$(az storage account keys list \
+            --resource-group "${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            --query '[0].value' -o tsv)
+          
+          # Check if state file exists
+          if az storage blob exists \
+            --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+            --name "terraform.tfstate" \
+            --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            --account-key "$ACCOUNT_KEY" \
+            --query "exists" -o tsv | grep -q "true"; then
+            echo "state_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ State file exists - will use existing state"
+            
+            # Download and show resources in state
+            az storage blob download \
+              --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+              --name "terraform.tfstate" \
+              --file "state-check.json" \
+              --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+              --account-key "$ACCOUNT_KEY" \
+              --output none
+            
+            echo "Resources in existing state:"
+            jq -r '.resources[] | "  - \(.type).\(.name)"' state-check.json || echo "  (unable to parse state)"
+          else
+            echo "state_exists=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No existing state file - this is a new deployment"
+          fi
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
       - name: Terraform Init
         id: init
         run: |
-          terraform init \
-            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
-            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
-            -backend-config="key=terraform.tfstate"
+          echo "Initializing Terraform..."
+          terraform init -reconfigure
+          
+          echo "Backend initialized successfully"
         working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      
+      - name: Show Current State
+        run: |
+          echo "Current resources in Terraform state:"
+          terraform state list || echo "No resources in state yet"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Import Existing Resources
+        id: import
+        run: |
+          echo "🔍 Checking for existing Azure resources that need to be imported..."
+          echo ""
+          
+          # Function to safely import a resource
+          import_resource() {
+            local resource_address=$1
+            local resource_id=$2
+            
+            echo "Checking: $resource_address"
+            
+            # Check if resource is already in state
+            if terraform state show "$resource_address" &> /dev/null; then
+              echo "  ✅ Already in state - skipping"
+              return 0
+            fi
+            
+            # Check if resource exists in Azure
+            if az resource show --ids "$resource_id" &> /dev/null; then
+              echo "  📥 Found in Azure - importing..."
+              if terraform import "$resource_address" "$resource_id" 2>&1; then
+                echo "  ✅ Successfully imported"
+                return 0
+              else
+                echo "  ⚠️ Import failed - will try to create"
+                return 1
+              fi
+            else
+              echo "  ℹ️ Does not exist in Azure - will be created"
+              return 0
+            fi
+          }
+          
+          echo "1️⃣ Importing Resource Group..."
+          import_resource "azurerm_resource_group.main" \
+            "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm"
+          echo ""
+          
+          echo "2️⃣ Importing Storage Accounts..."
+          STORAGE_ACCOUNTS=$(az storage account list --resource-group rg-windows-vm --query "[?starts_with(name, 'bootdiag')].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$STORAGE_ACCOUNTS" ]; then
+            for sa in $STORAGE_ACCOUNTS; do
+              echo "Found storage account: $sa"
+              import_resource "azurerm_storage_account.bootdiag" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Storage/storageAccounts/$sa"
+              break  # Only import the first one
+            done
+          else
+            echo "  ℹ️ No bootdiag storage accounts found"
+          fi
+          echo ""
+          
+          echo "3️⃣ Importing Network Resources..."
+          VNETS=$(az network vnet list --resource-group rg-windows-vm --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$VNETS" ]; then
+            for vnet in $VNETS; do
+              echo "Found VNet: $vnet"
+              import_resource "module.network.azurerm_virtual_network.main" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Network/virtualNetworks/$vnet"
+              
+              # Import subnets
+              SUBNETS=$(az network vnet subnet list --resource-group rg-windows-vm --vnet-name $vnet --query "[].name" -o tsv 2>/dev/null || echo "")
+              if [ -n "$SUBNETS" ]; then
+                subnet_index=0
+                for subnet in $SUBNETS; do
+                  echo "Found Subnet: $subnet"
+                  import_resource "module.network.azurerm_subnet.main[\"$subnet_index\"]" \
+                    "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Network/virtualNetworks/$vnet/subnets/$subnet"
+                  subnet_index=$((subnet_index + 1))
+                done
+              fi
+              break
+            done
+          else
+            echo "  ℹ️ No VNets found"
+          fi
+          echo ""
+          
+          echo "4️⃣ Importing NSG..."
+          NSGS=$(az network nsg list --resource-group rg-windows-vm --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$NSGS" ]; then
+            for nsg in $NSGS; do
+              echo "Found NSG: $nsg"
+              import_resource "module.network.azurerm_network_security_group.main" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Network/networkSecurityGroups/$nsg"
+              break
+            done
+          else
+            echo "  ℹ️ No NSGs found"
+          fi
+          echo ""
+          
+          echo "5️⃣ Importing Public IP..."
+          PUBLIC_IPS=$(az network public-ip list --resource-group rg-windows-vm --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$PUBLIC_IPS" ]; then
+            for pip in $PUBLIC_IPS; do
+              echo "Found Public IP: $pip"
+              import_resource "module.network.azurerm_public_ip.main" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Network/publicIPAddresses/$pip"
+              break
+            done
+          else
+            echo "  ℹ️ No Public IPs found"
+          fi
+          echo ""
+          
+          echo "6️⃣ Importing Network Interface..."
+          NICS=$(az network nic list --resource-group rg-windows-vm --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$NICS" ]; then
+            for nic in $NICS; do
+              echo "Found NIC: $nic"
+              import_resource "module.vm.azurerm_network_interface.main" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Network/networkInterfaces/$nic"
+              break
+            done
+          else
+            echo "  ℹ️ No NICs found"
+          fi
+          echo ""
+          
+          echo "7️⃣ Importing Virtual Machine..."
+          VMS=$(az vm list --resource-group rg-windows-vm --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$VMS" ]; then
+            for vm in $VMS; do
+              echo "Found VM: $vm"
+              import_resource "module.vm.azurerm_windows_virtual_machine.main" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Compute/virtualMachines/$vm"
+              break
+            done
+          else
+            echo "  ℹ️ No VMs found"
+          fi
+          echo ""
+          
+          echo "8️⃣ Importing Managed Disks..."
+          DISKS=$(az disk list --resource-group rg-windows-vm --query "[?name!=''].name" -o tsv 2>/dev/null || echo "")
+          if [ -n "$DISKS" ]; then
+            for disk in $DISKS; do
+              # Skip OS disks
+              if [[ $disk == *"OsDisk"* ]] || [[ $disk == *"osdisk"* ]]; then
+                echo "Skipping OS disk: $disk"
+                continue
+              fi
+              echo "Found Data Disk: $disk"
+              import_resource "module.vm.azurerm_managed_disk.data" \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-windows-vm/providers/Microsoft.Compute/disks/$disk"
+            done
+          else
+            echo "  ℹ️ No managed disks found"
+          fi
+          echo ""
+          
+          echo "✅ Import process complete!"
+          echo ""
+          echo "📊 Final state:"
+          terraform state list || echo "No resources in state"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: false
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -85,247 +314,5 @@ jobs:
         with:
           name: terraform-outputs
           path: ${{ env.TERRAFORM_DIR }}/outputs.json
-
-      - name: Get PR Number
-        id: pr
-        run: |
-          PR_NUMBER=$(gh pr list --state merged --json number,mergeCommit --jq ".[] | select(.mergeCommit.oid==\"${{ github.sha }}\") | .number")
-          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Comment on PR
-        if: steps.pr.outputs.number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            
-            let outputsText = 'No outputs defined';
-            try {
-              const outputs = JSON.parse(fs.readFileSync('${{ env.TERRAFORM_DIR }}/outputs.json', 'utf8'));
-              outputsText = '```json\n' + JSON.stringify(outputs, null, 2) + '\n```';
-            } catch (e) {
-              console.log('No outputs file found');
-            }
-
-            const applyStatus = '${{ steps.apply.outcome }}';
-            const emoji = applyStatus === 'success' ? '✅' : '❌';
-
-            const output = `## ${emoji} Terraform Apply ${applyStatus === 'success' ? 'Successful' : 'Failed'}
-
-            **Commit**: \`${{ github.sha }}\`
-            **Workflow**: [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            **Applied at**: ${new Date().toISOString()}
-
-            ### Infrastructure Outputs
-
-            ${outputsText}
-
-            ### Resources Created/Updated
-
-            View your resources in the [Azure Portal](https://portal.azure.com/#view/HubsExtension/BrowseAll)
-
-            ---
-            *Automated deployment by Terraform MCP Azure Automation*`;
-
-            github.rest.issues.createComment({
-              issue_number: ${{ steps.pr.outputs.number }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: output
-            })
-
-  post-deployment-validation:
-    name: Post-Deployment Validation
-    runs-on: ubuntu-latest
-    needs: terraform-apply
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Azure CLI
-        uses: azure/login@v1
-        with:
-          creds: |
-            {
-              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
-            }
-
-      - name: Verify Resources
-        id: verify
-        run: |
-          echo "Verifying deployed resources..."
-          
-          # List all resources in subscription
-          az resource list --output table > resources.txt
-          
-          # Count resources
-          RESOURCE_COUNT=$(az resource list --query "length(@)")
-          echo "Total resources: $RESOURCE_COUNT"
-          echo "resource_count=$RESOURCE_COUNT" >> $GITHUB_OUTPUT
-          
-          # Check for any failed deployments
-          FAILED_DEPLOYMENTS=$(az deployment sub list --query "[?properties.provisioningState=='Failed'] | length(@)")
-          echo "failed_deployments=$FAILED_DEPLOYMENTS" >> $GITHUB_OUTPUT
-          
-          if [ "$FAILED_DEPLOYMENTS" -gt 0 ]; then
-            echo "::warning::Found $FAILED_DEPLOYMENTS failed deployments"
-          fi
-
-      - name: Run Health Checks
-        id: health
-        run: |
-          echo "Running health checks on deployed resources..."
-          
-          # Check VMs are running
-          VM_COUNT=$(az vm list --query "length(@)")
-          RUNNING_VMS=$(az vm list --query "[?powerState=='VM running'] | length(@)")
-          echo "VMs: $RUNNING_VMS/$VM_COUNT running"
-          
-          # Check storage accounts are accessible
-          STORAGE_COUNT=$(az storage account list --query "length(@)")
-          echo "Storage Accounts: $STORAGE_COUNT"
-          
-          # Check network security groups
-          NSG_COUNT=$(az network nsg list --query "length(@)")
-          echo "Network Security Groups: $NSG_COUNT"
-          
-          echo "vm_count=$VM_COUNT" >> $GITHUB_OUTPUT
-          echo "running_vms=$RUNNING_VMS" >> $GITHUB_OUTPUT
-          echo "storage_count=$STORAGE_COUNT" >> $GITHUB_OUTPUT
-          echo "nsg_count=$NSG_COUNT" >> $GITHUB_OUTPUT
-
-      - name: Cost Analysis
-        id: cost
-        run: |
-          echo "Analyzing current costs..."
-          
-          # Get cost for current month
-          START_DATE=$(date -u -d "$(date +%Y-%m-01)" '+%Y-%m-%d')
-          END_DATE=$(date -u '+%Y-%m-%d')
-          
-          # Note: This requires Cost Management API access
-          # For POC, we'll just log the command
-          echo "Cost analysis period: $START_DATE to $END_DATE"
-          echo "Run this command manually for detailed costs:"
-          echo "az consumption usage list --start-date $START_DATE --end-date $END_DATE"
-
-      - name: Create Validation Report
-        run: |
-          cat > validation-report.md << EOF
-          # Post-Deployment Validation Report
-
-          **Deployment Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          **Commit**: \`${{ github.sha }}\`
-
-          ## Resource Summary
-
-          - **Total Resources**: ${{ steps.verify.outputs.resource_count }}
-          - **Failed Deployments**: ${{ steps.verify.outputs.failed_deployments }}
-
-          ## Health Check Results
-
-          - **Virtual Machines**: ${{ steps.health.outputs.running_vms }}/${{ steps.health.outputs.vm_count }} running
-          - **Storage Accounts**: ${{ steps.health.outputs.storage_count }}
-          - **Network Security Groups**: ${{ steps.health.outputs.nsg_count }}
-
-          ## Status
-
-          ${steps.verify.outputs.failed_deployments == '0' ? '✅ All deployments successful' : '⚠️ Some deployments failed - review required'}
-
-          ## Next Steps
-
-          1. Verify resources in [Azure Portal](https://portal.azure.com)
-          2. Run application-specific health checks
-          3. Monitor costs in [Cost Management](https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/overview)
-          4. Review security recommendations in [Security Center](https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/0)
-
-          ---
-          *Generated by Terraform MCP Azure Automation*
-          EOF
-
-      - name: Upload Validation Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: validation-report
-          path: validation-report.md
-
-      - name: Get PR Number
-        id: pr
-        run: |
-          PR_NUMBER=$(gh pr list --state merged --json number,mergeCommit --jq ".[] | select(.mergeCommit.oid==\"${{ github.sha }}\") | .number")
-          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Comment Validation Results
-        if: steps.pr.outputs.number != ''
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('validation-report.md', 'utf8');
-
-            github.rest.issues.createComment({
-              issue_number: ${{ steps.pr.outputs.number }},
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            })
-
-  notify-completion:
-    name: Notify Deployment Completion
-    runs-on: ubuntu-latest
-    needs: [terraform-apply, post-deployment-validation]
-    if: always()
-    steps:
-      - name: Create Deployment Summary
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const applyStatus = '${{ needs.terraform-apply.result }}';
-            const validationStatus = '${{ needs.post-deployment-validation.result }}';
-
-            const getEmoji = (status) => {
-              if (status === 'success') return '✅';
-              if (status === 'failure') return '❌';
-              return '⚠️';
-            };
-
-            const summary = `## 🚀 Deployment Summary
-
-            | Stage | Status |
-            |-------|--------|
-            | Terraform Apply | ${getEmoji(applyStatus)} ${applyStatus} |
-            | Post-Deployment Validation | ${getEmoji(validationStatus)} ${validationStatus} |
-
-            **Deployment Time**: ${new Date().toISOString()}
-            **Commit**: \`${{ github.sha }}\`
-            **Triggered by**: @${{ github.actor }}
-
-            ### Overall Status
-            ${applyStatus === 'success' && validationStatus === 'success' 
-              ? '✅ Deployment completed successfully! All resources are provisioned and validated.' 
-              : '⚠️ Deployment completed with issues. Please review the logs and validation report.'}
-
-            ### Quick Links
-            - [Azure Portal](https://portal.azure.com)
-            - [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            - [Cost Management](https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/overview)
-
-            ---
-            *Automated by Terraform MCP Azure Automation*`;
-
-            core.summary.addRaw(summary).write();
-
-      - name: Deployment Status Check
-        if: needs.terraform-apply.result != 'success'
-        run: |
-          echo "::error::Terraform apply failed. Please review the logs and fix any issues."
-          exit 1
 
 # Made with Bob
