@@ -13,8 +13,3 @@ variable "vnet_cidr" {
 variable "subnet_cidrs" {
   type = list(string)
 }
-
-variable "environment" {
-  type    = string
-  default = "Dev"
-}
