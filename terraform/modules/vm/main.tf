@@ -2,6 +2,7 @@ resource "azurerm_network_interface" "main" {
   name                = "nic-${var.resource_group_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
+
   ip_configuration {
     name                          = "internal"
     subnet_id                     = var.subnet_id
@@ -40,4 +41,21 @@ resource "random_password" "admin" {
   length           = 16
   special          = true
   override_special = "_%@"
+}
+
+resource "azurerm_managed_disk" "additional" {
+  name                 = "additionaldisk-${var.resource_group_name}"
+  location             = var.location
+  resource_group_name  = var.resource_group_name
+  storage_account_type = "Premium_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 256
+  tags                 = var.tags
+}
+
+resource "azurerm_virtual_machine_data_disk_attachment" "additional" {
+  managed_disk_id    = azurerm_managed_disk.additional.id
+  virtual_machine_id = azurerm_windows_virtual_machine.main.id
+  lun                = 10
+  caching            = "ReadWrite"
 }
