@@ -1,12 +1,12 @@
 resource "azurerm_virtual_network" "main" {
-  name                = "vnet-main"
+  name                = "vnet"
   address_space       = [var.vnet_cidr]
   location            = var.location
   resource_group_name = var.resource_group_name
 
   tags = {
-    Environment = var.environment
-    Service     = "network-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
@@ -14,14 +14,14 @@ resource "azurerm_virtual_network" "main" {
 
 resource "azurerm_subnet" "main" {
   for_each             = toset(var.subnet_cidrs)
-  name                 = "subnet-${each.value}"
+  name                 = "subnet-${each.key}"
   resource_group_name  = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = [each.value]
 }
 
 resource "azurerm_network_security_group" "main" {
-  name                = "nsg-main"
+  name                = "nsg"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -38,22 +38,22 @@ resource "azurerm_network_security_group" "main" {
   }
 
   tags = {
-    Environment = var.environment
-    Service     = "nsg-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "publicip-main"
+  name                = "publicip"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Dynamic"
 
   tags = {
-    Environment = var.environment
-    Service     = "publicip-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }

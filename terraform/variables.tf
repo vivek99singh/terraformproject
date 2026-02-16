@@ -1,32 +1,23 @@
-variable "location" {
-  description = "Azure region for all resources."
-  type        = string
+variable "resource_group_name" {
+  type = string
 }
 
-variable "environment" {
-  description = "Deployment environment (Dev, Stage, Prod)."
-  type        = string
-  default     = "Dev"
+variable "location" {
+  type = string
 }
 
 variable "vnet_cidr" {
-  description = "CIDR for the virtual network."
-  type        = string
+  type = string
 }
 
 variable "subnet_cidrs" {
-  description = "List of CIDRs for the subnets."
-  type        = list(string)
+  type = list(string)
 }
 
 variable "vm_size" {
-  description = "Size of the VM."
-  type        = string
-  default     = "Standard_D2s_v5"
+  type = string
 }
 
 variable "admin_username" {
-  description = "Admin username for the VM."
-  type        = string
-  default     = "adminuser"
+  type = string
 }
