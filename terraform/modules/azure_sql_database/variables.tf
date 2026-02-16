@@ -10,10 +10,5 @@ variable "location" {
 
 variable "tags" {
   type        = map(string)
-  default     = {
-    Environment = "Dev"
-    Service     = "terraform-managed"
-    ManagedBy   = "Terraform"
-  }
   description = "A mapping of tags to assign to the resources."
 }
