@@ -479,14 +479,28 @@ REMEMBER:
 - If you create a storage account for diagnostics, you MUST add boot_diagnostics block to the VM resource
 
 OUTPUT FORMAT:
-CRITICAL: Output ONLY valid HCL code. NO explanatory text. NO prose. NO sentences.
-CRITICAL: Do NOT add text like "This setup provides..." or "This configuration..." anywhere.
-CRITICAL: Every line must be valid Terraform HCL syntax or HCL comments (starting with #).
+
+CRITICAL FILE FORMAT RULES (MUST FOLLOW EXACTLY):
+1. Each file MUST start with: ### FILE: <filepath>
+2. After the file marker, provide ONLY valid HCL code
+3. NO explanatory text, NO prose, NO sentences outside of HCL comments
+4. Module files MUST use paths like: ### FILE: modules/network/main.tf
+5. Root files use: ### FILE: main.tf (no path prefix)
+
+EXAMPLE OF CORRECT FORMAT:
+### FILE: main.tf
+resource "azurerm_resource_group" "main" {
+  name = "example"
+}
+
+### FILE: modules/network/main.tf
+resource "azurerm_virtual_network" "main" {
+  name = "vnet"
+}
 
 ${requirements.specifications?.useModules ? `
-Provide the code in this format:
+YOU MUST provide the code in EXACTLY this format:
 ### FILE: main.tf
-[ONLY HCL CODE BELOW - NO EXPLANATIONS:
 
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
