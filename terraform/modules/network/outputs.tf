@@ -1,5 +1,5 @@
-output "subnet_ids" {
-  value = [for s in azurerm_subnet.main : s.id]
+output "subnet_id" {
+  value = values(azurerm_subnet.main)[0].id
 }
 
 output "nsg_id" {

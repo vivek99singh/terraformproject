@@ -1,15 +1,13 @@
 variable "resource_group_name" {
-  type    = string
-  default = "rg-vm-example"
+  type = string
 }
 
 variable "location" {
-  type    = string
-  default = "eastus"
+  type = string
 }
 
 variable "tags" {
-  type    = map(string)
+  type = map(string)
   default = {
     Environment = "Dev"
     Service     = "terraform-managed"
@@ -18,21 +16,19 @@ variable "tags" {
 }
 
 variable "vnet_cidr" {
-  type    = string
-  default = "10.0.0.0/16"
+  type = string
 }
 
 variable "subnet_cidrs" {
-  type    = list(string)
-  default = ["10.0.1.0/24", "10.0.2.0/24"]
+  type = list(string)
 }
 
 variable "vm_size" {
-  type    = string
+  type = string
   default = "Standard_D2s_v5"
 }
 
 variable "admin_username" {
-  type    = string
+  type = string
   default = "adminuser"
 }
