@@ -36,3 +36,13 @@ variable "boot_diagnostics_storage_account_uri" {
   type    = string
   default = null
 }
+
+variable "os_type" {
+  type        = string
+  default     = "linux"
+  description = "OS type: windows or linux"
+  validation {
+    condition     = contains(["windows", "linux"], var.os_type)
+    error_message = "os_type must be either 'windows' or 'linux'"
+  }
+}

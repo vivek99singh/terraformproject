@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "main" {
-  name                = "nic-${var.resource_group_name}"
+  name                = "${var.resource_group_name}-nic"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -12,15 +12,14 @@ resource "azurerm_network_interface" "main" {
 }
 
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "vm-${var.resource_group_name}"
+  count               = var.os_type == "windows" ? 1 : 0
+  name                = "${var.resource_group_name}-vm"
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
   admin_username      = var.admin_username
   admin_password      = random_password.admin.result
-  network_interface_ids = [
-    azurerm_network_interface.main.id,
-  ]
+  network_interface_ids = [azurerm_network_interface.main.id]
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Premium_LRS"
@@ -31,31 +30,15 @@ resource "azurerm_windows_virtual_machine" "main" {
     sku       = "2019-Datacenter"
     version   = "latest"
   }
+  tags = var.tags
+
   boot_diagnostics {
     storage_account_uri = var.boot_diagnostics_storage_account_uri
   }
-  tags = var.tags
 }
 
 resource "random_password" "admin" {
   length           = 16
   special          = true
   override_special = "_%@"
-}
-
-resource "azurerm_managed_disk" "additional" {
-  name                 = "additionaldisk-${var.resource_group_name}"
-  location             = var.location
-  resource_group_name  = var.resource_group_name
-  storage_account_type = "Premium_LRS"
-  create_option        = "Empty"
-  disk_size_gb         = 256
-  tags                 = var.tags
-}
-
-resource "azurerm_virtual_machine_data_disk_attachment" "additional" {
-  managed_disk_id    = azurerm_managed_disk.additional.id
-  virtual_machine_id = azurerm_windows_virtual_machine.main.id
-  lun                = 10
-  caching            = "ReadWrite"
 }
