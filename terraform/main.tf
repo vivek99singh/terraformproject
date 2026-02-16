@@ -32,13 +32,13 @@ module "network" {
 module "vm" {
   source = "./modules/vm"
   
-  resource_group_name                  = azurerm_resource_group.main.name
-  location                             = azurerm_resource_group.main.location
-  subnet_id                            = module.network.subnet_ids[0]
-  vm_size                              = var.vm_size
-  admin_username                       = var.admin_username
-  tags                                 = var.tags
-  public_ip_id                         = module.network.public_ip_id
-  nsg_id                               = module.network.nsg_id
+  resource_group_name                 = azurerm_resource_group.main.name
+  location                            = azurerm_resource_group.main.location
+  subnet_id                           = module.network.subnet_id
+  vm_size                             = var.vm_size
+  admin_username                      = var.admin_username
+  tags                                = var.tags
+  public_ip_id                        = module.network.public_ip_id
+  nsg_id                              = module.network.nsg_id
   boot_diagnostics_storage_account_uri = azurerm_storage_account.bootdiag.primary_blob_endpoint
 }
