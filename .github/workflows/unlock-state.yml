@@ -1,0 +1,147 @@
+name: Unlock Terraform State
+
+on:
+  workflow_dispatch:
+    inputs:
+      lock_id:
+        description: 'Lock ID to force unlock (optional)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: '1.6.0'
+  TERRAFORM_DIR: './terraform'
+
+jobs:
+  unlock-state:
+    name: Force Unlock Terraform State
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      - name: Check and Remove Lock File
+        run: |
+          echo "🔍 Checking for state lock..."
+          
+          # Get storage account key
+          ACCOUNT_KEY=$(az storage account keys list \
+            --resource-group "${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            --query '[0].value' -o tsv)
+          
+          # Check if lock file exists
+          LOCK_FILE="terraform.tfstate.lock"
+          
+          if az storage blob exists \
+            --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+            --name "$LOCK_FILE" \
+            --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            --account-key "$ACCOUNT_KEY" \
+            --query "exists" -o tsv | grep -q "true"; then
+            
+            echo "🔒 Lock file found: $LOCK_FILE"
+            
+            # Download and show lock info
+            az storage blob download \
+              --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+              --name "$LOCK_FILE" \
+              --file "lock-info.json" \
+              --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+              --account-key "$ACCOUNT_KEY" \
+              --output none 2>/dev/null || true
+            
+            if [ -f "lock-info.json" ]; then
+              echo "📄 Lock Information:"
+              cat lock-info.json
+              echo ""
+            fi
+            
+            echo "🗑️  Deleting lock file..."
+            az storage blob delete \
+              --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+              --name "$LOCK_FILE" \
+              --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+              --account-key "$ACCOUNT_KEY" \
+              --output none
+            
+            echo "✅ Lock file deleted!"
+          else
+            echo "✅ No lock file found"
+          fi
+          
+          # Also check for blob lease
+          echo ""
+          echo "🔍 Checking for blob lease on state file..."
+          
+          LEASE_STATE=$(az storage blob show \
+            --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+            --name "terraform.tfstate" \
+            --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            --account-key "$ACCOUNT_KEY" \
+            --query "properties.lease.state" -o tsv 2>/dev/null || echo "available")
+          
+          echo "Lease state: $LEASE_STATE"
+          
+          if [ "$LEASE_STATE" = "leased" ]; then
+            echo "🔓 Breaking lease on state file..."
+            az storage blob lease break \
+              --container-name "${{ secrets.TF_STATE_CONTAINER }}" \
+              --blob-name "terraform.tfstate" \
+              --account-name "${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+              --account-key "$ACCOUNT_KEY" \
+              --output none || true
+            echo "✅ Lease broken!"
+          fi
+
+      - name: Terraform Init
+        run: |
+          echo "🔧 Initializing Terraform to verify unlock..."
+          terraform init -reconfigure
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Verify State Access
+        run: |
+          echo "✅ Testing state access..."
+          terraform state list || echo "State is empty or new"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Summary
+        run: |
+          echo "🎉 State unlock complete!"
+          echo ""
+          echo "📝 Next Steps:"
+          echo "   1. Re-run the Terraform Apply workflow"
+          echo "   2. The state should now be accessible"
+          echo "   3. Import step will run and prevent 'already exists' errors"
+
+# Made with Bob
