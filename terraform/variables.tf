@@ -1,11 +1,27 @@
 variable "resource_group_name" {
-  type    = string
-  default = "rg-terraform-vm"
+  type = string
 }
 
 variable "location" {
+  type = string
+}
+
+variable "vnet_cidr" {
+  type = string
+}
+
+variable "subnet_cidrs" {
+  type = list(string)
+}
+
+variable "vm_size" {
+  type = string
+  default = "Standard_D2s_v5"
+}
+
+variable "admin_username" {
   type    = string
-  default = "eastus"
+  default = "adminuser"
 }
 
 variable "tags" {
@@ -15,24 +31,4 @@ variable "tags" {
     Service     = "terraform-managed"
     ManagedBy   = "Terraform"
   }
-}
-
-variable "vnet_cidr" {
-  type    = string
-  default = "10.0.0.0/16"
-}
-
-variable "subnet_cidrs" {
-  type    = list(string)
-  default = ["10.0.1.0/24", "10.0.2.0/24"]
-}
-
-variable "vm_size" {
-  type    = string
-  default = "Standard_D2s_v5"
-}
-
-variable "admin_username" {
-  type    = string
-  default = "adminuser"
 }

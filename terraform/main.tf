@@ -23,7 +23,7 @@ module "network" {
   source = "./modules/network"
   
   resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  location            = var.location
   vnet_cidr           = var.vnet_cidr
   subnet_cidrs        = var.subnet_cidrs
   tags                = var.tags
@@ -33,7 +33,7 @@ module "vm" {
   source = "./modules/vm"
   
   resource_group_name                  = azurerm_resource_group.main.name
-  location                             = azurerm_resource_group.main.location
+  location                             = var.location
   subnet_id                            = module.network.subnet_ids[0]
   vm_size                              = var.vm_size
   admin_username                       = var.admin_username
