@@ -1,5 +1,5 @@
 resource "azurerm_virtual_network" "main" {
-  name                = "${var.resource_group_name}-vnet"
+  name                = "vnet-${var.resource_group_name}"
   address_space       = [var.vnet_cidr]
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -15,14 +15,14 @@ resource "azurerm_subnet" "main" {
 }
 
 resource "azurerm_network_security_group" "main" {
-  name                = "${var.resource_group_name}-nsg"
+  name                = "nsg-${var.resource_group_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
   tags                = var.tags
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "${var.resource_group_name}-pip"
+  name                = "publicip-${var.resource_group_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Dynamic"

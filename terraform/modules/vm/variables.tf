@@ -23,16 +23,16 @@ variable "tags" {
 }
 
 variable "public_ip_id" {
-  type    = string
-  default = null
+  type        = string
+  default     = null
 }
 
 variable "nsg_id" {
-  type    = string
-  default = null
+  type        = string
+  default     = null
 }
 
 variable "boot_diagnostics_storage_account_uri" {
-  type    = string
-  default = null
+  type        = string
+  default     = null
 }
