@@ -116,6 +116,7 @@ jobs:
           soft_fail: true
           format: json
           additional_args: --out tfsec-results.json
+          github_token: ${{ secrets.GH_TOKEN }}
 
       - name: Install Terrascan
         run: |
