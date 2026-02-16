@@ -269,6 +269,22 @@ CRITICAL RULES - RESOURCE DEPENDENCIES:
 - CRITICAL: NEVER use functions like timestamp() in variable default values - functions are ONLY allowed in resource/data blocks
 - Variable defaults must be static values only (strings, numbers, booleans, lists, maps)
 
+CRITICAL RULES - MODULE VARIABLES (PREVENT "MISSING REQUIRED ARGUMENT" ERRORS):
+1. In module variables.tf: Variables WITHOUT "default =" are REQUIRED
+2. In module variables.tf: Variables WITH "default = null" (or any default) are OPTIONAL
+3. In root main.tf module calls: MUST pass ALL required variables (those without defaults)
+4. In root main.tf module calls: CAN omit optional variables (those with defaults)
+5. ALWAYS include these as REQUIRED in ALL modules (no defaults):
+   - resource_group_name
+   - location
+   - tags
+6. ALWAYS include these as OPTIONAL in modules (with default = null):
+   - public_ip_id (only pass if public IP created)
+   - nsg_id (only pass if NSG created)
+   - boot_diagnostics_storage_account_uri (only pass if storage account created)
+7. When in doubt, add "default = null" to make a variable optional
+8. NEVER create a required variable (no default) unless it's absolutely necessary
+
 RESOURCE-SPECIFIC DEPENDENCY RULES (CRITICAL - DO NOT HALLUCINATE):
 1. **Virtual Machines (VMs)**: REQUIRE Resource Group, VNet, Subnet, NSG, NIC, optionally Public IP
 2. **Storage Accounts**: REQUIRE ONLY Resource Group. DO NOT create VNet, Subnet, NIC, Public IP unless user explicitly requests private endpoint
@@ -464,23 +480,64 @@ OUTPUT FORMAT:
 ${requirements.specifications?.useModules ? `
 Provide the code in this format:
 ### FILE: main.tf
-[root main.tf with:
-- azurerm_resource_group
-- azurerm_storage_account for boot diagnostics (if VM needs diagnostics)
-- random_string for unique storage account name (if storage account created)
-- module "network" block with ALL required variables:
-  * source = "./modules/network"
-  * resource_group_name = azurerm_resource_group.main.name
-  * location = azurerm_resource_group.main.location
-  * vnet_cidr = "10.0.0.0/16"
-  * subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
-  * tags = var.tags (REQUIRED - must pass tags to module)
-- module "vm" block with ALL required variables:
-  * source = "./modules/vm"
-  * All variables from network module outputs
-  * boot_diagnostics_storage_account_uri if storage account created
-  * tags = var.tags (REQUIRED - must pass tags to module)
-ONLY HCL CODE, NO EXPLANATIONS]
+[root main.tf - COMPLETE EXAMPLE:
+
+resource "azurerm_resource_group" "main" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = var.tags
+}
+
+# Storage account for boot diagnostics (if needed)
+resource "random_string" "storage_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+resource "azurerm_storage_account" "bootdiag" {
+  name                     = "bootdiag\${random_string.storage_suffix.result}"
+  resource_group_name      = azurerm_resource_group.main.name
+  location                 = azurerm_resource_group.main.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+  tags                     = var.tags
+}
+
+module "network" {
+  source = "./modules/network"
+  
+  # REQUIRED variables (no defaults in module)
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  vnet_cidr          = var.vnet_cidr
+  subnet_cidrs       = var.subnet_cidrs
+  tags               = var.tags
+}
+
+module "vm" {
+  source = "./modules/vm"
+  
+  # REQUIRED variables (no defaults in module)
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  subnet_id           = module.network.subnet_id
+  vm_size             = var.vm_size
+  admin_username      = var.admin_username
+  tags                = var.tags
+  
+  # OPTIONAL variables (have default = null in module, only pass if used)
+  public_ip_id                          = module.network.public_ip_id
+  nsg_id                                = module.network.nsg_id
+  boot_diagnostics_storage_account_uri  = azurerm_storage_account.bootdiag.primary_blob_endpoint
+}
+
+CRITICAL RULES FOR MODULE CALLS:
+1. ALWAYS pass ALL required variables (those without defaults in module variables.tf)
+2. ONLY pass optional variables if they are actually used/created
+3. If a module variable has "default = null", you can omit it from the module call
+4. If a module variable has NO default, you MUST pass it in the module call
+]
 
 ### FILE: variables.tf
 [root variables - ONLY HCL CODE, NO EXPLANATIONS]
@@ -510,12 +567,49 @@ subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
 DO NOT create storage account here!]
 
 ### FILE: modules/network/variables.tf
-[Network module variables:
-- variable "resource_group_name" { type = string }
-- variable "location" { type = string }
-- variable "vnet_cidr" { type = string }
-- variable "subnet_cidrs" { type = list(string) }
-- variable "tags" { type = map(string), description = "Tags to apply to all resources" }
+[Network module variables - COMPLETE EXAMPLE:
+
+# REQUIRED variables (no default value)
+variable "resource_group_name" {
+  type        = string
+  description = "Name of the resource group"
+}
+
+variable "location" {
+  type        = string
+  description = "Azure region"
+}
+
+variable "vnet_cidr" {
+  type        = string
+  description = "CIDR block for VNet"
+}
+
+variable "subnet_cidrs" {
+  type        = list(string)
+  description = "List of CIDR blocks for subnets"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to all resources"
+}
+
+# OPTIONAL variables (with default = null)
+# Add these ONLY if the module creates these resources conditionally
+variable "create_public_ip" {
+  type        = bool
+  default     = true
+  description = "Whether to create public IP"
+}
+
+variable "create_nsg" {
+  type        = bool
+  default     = true
+  description = "Whether to create NSG"
+}
+
+CRITICAL: If a variable has NO default, it is REQUIRED and MUST be passed when calling the module
 ]
 
 ### FILE: modules/network/outputs.tf
@@ -542,20 +636,73 @@ DO NOT create storage account here!]
 DO NOT create storage account here - it's created in root main.tf!]
 
 ### FILE: modules/vm/variables.tf
-[VM module variables:
-- variable "subnet_id" { type = string }
-- variable "resource_group_name" { type = string }
-- variable "location" { type = string }
-- variable "vm_size" { type = string }
-- variable "admin_username" { type = string }
-- variable "tags" { type = map(string), description = "Tags to apply to all resources" }
-- variable "public_ip_id" { type = string, default = null, description = "Public IP ID (optional)" }
-- variable "nsg_id" { type = string, default = null, description = "NSG ID (optional)" }
-- variable "boot_diagnostics_storage_account_uri" { type = string, default = null, description = "Storage account URI for boot diagnostics (optional)" }
-- etc.
+[VM module variables - COMPLETE EXAMPLE:
 
-CRITICAL: Optional variables MUST have "default = null" or another default value
-Required variables have NO default value
+# REQUIRED variables (no default value - MUST be passed)
+variable "resource_group_name" {
+  type        = string
+  description = "Name of the resource group"
+}
+
+variable "location" {
+  type        = string
+  description = "Azure region"
+}
+
+variable "subnet_id" {
+  type        = string
+  description = "ID of the subnet for the VM NIC"
+}
+
+variable "vm_size" {
+  type        = string
+  description = "Size of the VM"
+}
+
+variable "admin_username" {
+  type        = string
+  description = "Admin username for the VM"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to all resources"
+}
+
+# OPTIONAL variables (with default = null - can be omitted)
+variable "public_ip_id" {
+  type        = string
+  default     = null
+  description = "Public IP ID (optional, pass only if public IP is created)"
+}
+
+variable "nsg_id" {
+  type        = string
+  default     = null
+  description = "NSG ID (optional, pass only if NSG is created)"
+}
+
+variable "boot_diagnostics_storage_account_uri" {
+  type        = string
+  default     = null
+  description = "Storage account URI for boot diagnostics (optional, pass only if storage account is created)"
+}
+
+variable "os_type" {
+  type        = string
+  default     = "linux"
+  description = "OS type: windows or linux"
+  validation {
+    condition     = contains(["windows", "linux"], var.os_type)
+    error_message = "os_type must be either 'windows' or 'linux'"
+  }
+}
+
+CRITICAL RULES:
+1. Variables WITHOUT default = REQUIRED, MUST be passed in module call
+2. Variables WITH default = OPTIONAL, can be omitted from module call
+3. NEVER create a variable without a default unless it's truly required
+4. If unsure, add "default = null" to make it optional
 ]
 
 ### FILE: modules/vm/outputs.tf
