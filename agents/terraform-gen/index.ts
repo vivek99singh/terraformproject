@@ -468,8 +468,18 @@ Provide the code in this format:
 - azurerm_resource_group
 - azurerm_storage_account for boot diagnostics (if VM needs diagnostics)
 - random_string for unique storage account name (if storage account created)
-- module "network" block with actual CIDR values (e.g., vnet_cidr = "10.0.0.0/16", subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"])
-- module "vm" block with values from network module outputs AND boot_diagnostics_storage_account_uri if storage account created
+- module "network" block with ALL required variables:
+  * source = "./modules/network"
+  * resource_group_name = azurerm_resource_group.main.name
+  * location = azurerm_resource_group.main.location
+  * vnet_cidr = "10.0.0.0/16"
+  * subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+  * tags = var.tags (REQUIRED - must pass tags to module)
+- module "vm" block with ALL required variables:
+  * source = "./modules/vm"
+  * All variables from network module outputs
+  * boot_diagnostics_storage_account_uri if storage account created
+  * tags = var.tags (REQUIRED - must pass tags to module)
 ONLY HCL CODE, NO EXPLANATIONS]
 
 ### FILE: variables.tf
@@ -505,6 +515,7 @@ DO NOT create storage account here!]
 - variable "location" { type = string }
 - variable "vnet_cidr" { type = string }
 - variable "subnet_cidrs" { type = list(string) }
+- variable "tags" { type = map(string), description = "Tags to apply to all resources" }
 ]
 
 ### FILE: modules/network/outputs.tf
@@ -540,6 +551,7 @@ DO NOT create storage account here - it's created in root main.tf!]
 - variable "vm_size" { type = string }
 - variable "admin_username" { type = string }
 - variable "boot_diagnostics_storage_account_uri" { type = string, description = "Storage account URI for boot diagnostics" }
+- variable "tags" { type = map(string), description = "Tags to apply to all resources" }
 - etc.
 ]
 
@@ -561,6 +573,7 @@ CRITICAL MODULE RULES:
 4. Keep module interfaces simple - only pass what's needed:
    - resource_group_name (required)
    - location (required)
+   - tags (REQUIRED - all modules need tags variable)
    - Resource-specific configs (vm_size, disk_size, cidr blocks, etc.)
    - boot_diagnostics_storage_account_uri (if storage account created in root)
 5. Module outputs.tf can ONLY reference resources defined in that module's main.tf
@@ -568,6 +581,8 @@ CRITICAL MODULE RULES:
    - Declared in modules/vm/variables.tf as: variable "subnet_id" { type = string }
    - Passed in root main.tf as: module "vm" { subnet_id = module.network.subnet_id }
    - Output from modules/network/outputs.tf as: output "subnet_id" { value = azurerm_subnet.main.id }
+7. ALWAYS include "tags" variable in ALL module variables.tf files
+8. ALWAYS pass "tags = var.tags" when calling modules from root main.tf
 7. Outputs MUST be in outputs.tf ONLY, NOT in main.tf
 8. Each module should be self-contained but accept inputs from other modules via variables
 9. BOOT DIAGNOSTICS: Storage account is created in ROOT main.tf, URI is passed to VM module as variable
