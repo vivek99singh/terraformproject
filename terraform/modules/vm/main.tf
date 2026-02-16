@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "main" {
-  name                = "nic-main"
+  name                = "nic-resource"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -11,16 +11,20 @@ resource "azurerm_network_interface" "main" {
   }
 }
 
+resource "random_password" "admin" {
+  length           = 16
+  special          = true
+  override_special = "_%@"
+}
+
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "vm-main"
+  name                = "vm-resource"
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
   admin_username      = var.admin_username
   admin_password      = random_password.admin.result
-  network_interface_ids = [
-    azurerm_network_interface.main.id,
-  ]
+  network_interface_ids = [azurerm_network_interface.main.id]
 
   os_disk {
     caching              = "ReadWrite"
@@ -39,21 +43,15 @@ resource "azurerm_windows_virtual_machine" "main" {
   }
 
   tags = {
-    Environment = var.environment
-    Service     = "vm-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
 }
 
-resource "random_password" "admin" {
-  length           = 16
-  special          = true
-  override_special = "_%@"
-}
-
 resource "azurerm_managed_disk" "additional" {
-  name                 = "additionaldisk-main"
+  name                 = "additionaldisk-resource"
   location             = var.location
   resource_group_name  = var.resource_group_name
   storage_account_type = "Premium_LRS"
@@ -61,14 +59,14 @@ resource "azurerm_managed_disk" "additional" {
   disk_size_gb         = 256
 
   tags = {
-    Environment = var.environment
-    Service     = "additional-disk"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
 }
 
-resource "azurerm_virtual_machine_data_disk_attachment" "main" {
+resource "azurerm_virtual_machine_data_disk_attachment" "additional" {
   managed_disk_id    = azurerm_managed_disk.additional.id
   virtual_machine_id = azurerm_windows_virtual_machine.main.id
   lun                = 10
