@@ -226,14 +226,20 @@ MANDATORY TAGGING REQUIREMENTS (CRITICAL):
   * Environment: Must be one of "Dev", "Stage", or "Prod" (default to "Dev" if not specified)
   * Service: Name of the service/application (use resource name or "terraform-managed" as default)
   * ManagedBy: Always set to "Terraform"
-  * CreatedDate: Use timestamp() function or current date
+  * CreatedDate: Use timestamp() function in resource blocks (NOT in variable defaults)
 - Apply tags to: Resource Groups, VNets, Subnets, NSGs, VMs, Disks, NICs, Public IPs, Storage Accounts, etc.
-- Tags format:
+- Tags format in RESOURCES:
   tags = {
-    Environment = "Dev"  # or "Stage" or "Prod"
-    Service     = "application-name"
+    Environment = var.environment
+    Service     = var.service_name
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
+  }
+- Tags format in VARIABLE DEFAULTS (NO FUNCTIONS ALLOWED):
+  default = {
+    Environment = "Dev"
+    Service     = "terraform-managed"
+    ManagedBy   = "Terraform"
   }
 
 CRITICAL: STORAGE ACCOUNTS vs MANAGED DISKS
@@ -260,6 +266,8 @@ CRITICAL RULES - RESOURCE DEPENDENCIES:
 - When modules are requested, create proper module structure with separate directories
 - When separate files are requested, organize code into variables.tf, outputs.tf, main.tf, etc.
 - Place provider configuration in the file specified by user (default: provider.tf)
+- CRITICAL: NEVER use functions like timestamp() in variable default values - functions are ONLY allowed in resource/data blocks
+- Variable defaults must be static values only (strings, numbers, booleans, lists, maps)
 
 RESOURCE-SPECIFIC DEPENDENCY RULES (CRITICAL - DO NOT HALLUCINATE):
 1. **Virtual Machines (VMs)**: REQUIRE Resource Group, VNet, Subnet, NSG, NIC, optionally Public IP
