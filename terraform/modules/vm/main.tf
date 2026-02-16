@@ -19,6 +19,7 @@ resource "random_password" "admin" {
 
 resource "azurerm_windows_virtual_machine" "main" {
   name                = "vm-${var.resource_group_name}"
+  computer_name       = substr("vm-${replace(var.resource_group_name, "-", "")}", 0, 15)
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
