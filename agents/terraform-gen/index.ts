@@ -544,15 +544,18 @@ DO NOT create storage account here - it's created in root main.tf!]
 ### FILE: modules/vm/variables.tf
 [VM module variables:
 - variable "subnet_id" { type = string }
-- variable "public_ip_id" { type = string } (if needed)
-- variable "nsg_id" { type = string }
 - variable "resource_group_name" { type = string }
 - variable "location" { type = string }
 - variable "vm_size" { type = string }
 - variable "admin_username" { type = string }
-- variable "boot_diagnostics_storage_account_uri" { type = string, description = "Storage account URI for boot diagnostics" }
 - variable "tags" { type = map(string), description = "Tags to apply to all resources" }
+- variable "public_ip_id" { type = string, default = null, description = "Public IP ID (optional)" }
+- variable "nsg_id" { type = string, default = null, description = "NSG ID (optional)" }
+- variable "boot_diagnostics_storage_account_uri" { type = string, default = null, description = "Storage account URI for boot diagnostics (optional)" }
 - etc.
+
+CRITICAL: Optional variables MUST have "default = null" or another default value
+Required variables have NO default value
 ]
 
 ### FILE: modules/vm/outputs.tf
@@ -567,22 +570,31 @@ DO NOT output public_ip_address here - it's in the network module!
 [repeat for each module: storage, etc.]
 
 CRITICAL MODULE RULES:
-1. Root main.tf MUST pass ALL required variables to modules
-2. Module variables.tf should ONLY declare variables that are actually needed
-3. DO NOT create unnecessary variables like "environment" or "unique_identifier" unless user specifically requests them
-4. Keep module interfaces simple - only pass what's needed:
-   - resource_group_name (required)
-   - location (required)
-   - tags (REQUIRED - all modules need tags variable)
-   - Resource-specific configs (vm_size, disk_size, cidr blocks, etc.)
-   - boot_diagnostics_storage_account_uri (if storage account created in root)
-5. Module outputs.tf can ONLY reference resources defined in that module's main.tf
-6. If VM module needs subnet_id, it must be:
+1. Root main.tf MUST pass ALL REQUIRED variables to modules (variables without defaults)
+2. Optional variables (with default = null or other defaults) do NOT need to be passed if not used
+3. Module variables.tf should ONLY declare variables that are actually needed
+4. DO NOT create unnecessary variables like "environment" or "unique_identifier" unless user specifically requests them
+5. Keep module interfaces simple - distinguish between required and optional:
+   
+   REQUIRED (no default, must be passed):
+   - resource_group_name
+   - location
+   - tags
+   - Resource-specific configs (vm_size, subnet_id, vnet_cidr, etc.)
+   
+   OPTIONAL (with default = null, only pass if used):
+   - public_ip_id (default = null)
+   - nsg_id (default = null)
+   - boot_diagnostics_storage_account_uri (default = null)
+
+6. Module outputs.tf can ONLY reference resources defined in that module's main.tf
+7. If VM module needs subnet_id, it must be:
    - Declared in modules/vm/variables.tf as: variable "subnet_id" { type = string }
    - Passed in root main.tf as: module "vm" { subnet_id = module.network.subnet_id }
-   - Output from modules/network/outputs.tf as: output "subnet_id" { value = azurerm_subnet.main.id }
-7. ALWAYS include "tags" variable in ALL module variables.tf files
-8. ALWAYS pass "tags = var.tags" when calling modules from root main.tf
+   - Output from modules/network/outputs.tf as: output "subnet_id" { value = values(azurerm_subnet.main)[0].id }
+8. ALWAYS include "tags" variable in ALL module variables.tf files (required, no default)
+9. ALWAYS pass "tags = var.tags" when calling modules from root main.tf
+10. Use "default = null" for optional variables that may not always be provided
 7. Outputs MUST be in outputs.tf ONLY, NOT in main.tf
 8. Each module should be self-contained but accept inputs from other modules via variables
 9. BOOT DIAGNOSTICS: Storage account is created in ROOT main.tf, URI is passed to VM module as variable
