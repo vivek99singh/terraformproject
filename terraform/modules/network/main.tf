@@ -22,9 +22,10 @@ resource "azurerm_network_security_group" "main" {
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "publicip-${var.resource_group_name}"
+  name                = "pip-${var.resource_group_name}"
   location            = var.location
   resource_group_name = var.resource_group_name
-  allocation_method   = "Dynamic"
+  allocation_method   = "Static"
+  sku                 = "Standard"
   tags                = var.tags
 }
