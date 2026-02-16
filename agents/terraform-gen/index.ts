@@ -220,6 +220,8 @@ Generate production-ready Terraform HCL code following these principles:
 11. Use Terraform best practices: locals, for_each, dynamic blocks when appropriate
 12. Avoid using "example" as resource aliases unless specifically requested
 13. ALWAYS include "skip_provider_registration = true" in the azurerm provider block
+14. CRITICAL: Output ONLY valid HCL code - NO explanatory text, NO comments outside of HCL comments, NO markdown
+15. CRITICAL: Every file must contain ONLY valid Terraform HCL syntax - no prose, no descriptions outside of HCL
 
 MANDATORY TAGGING REQUIREMENTS (CRITICAL):
 - ALL Azure resources that support tags MUST include these tags:
@@ -477,10 +479,14 @@ REMEMBER:
 - If you create a storage account for diagnostics, you MUST add boot_diagnostics block to the VM resource
 
 OUTPUT FORMAT:
+CRITICAL: Output ONLY valid HCL code. NO explanatory text. NO prose. NO sentences.
+CRITICAL: Do NOT add text like "This setup provides..." or "This configuration..." anywhere.
+CRITICAL: Every line must be valid Terraform HCL syntax or HCL comments (starting with #).
+
 ${requirements.specifications?.useModules ? `
 Provide the code in this format:
 ### FILE: main.tf
-[root main.tf - COMPLETE EXAMPLE:
+[ONLY HCL CODE BELOW - NO EXPLANATIONS:
 
 resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
