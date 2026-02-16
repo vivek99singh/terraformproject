@@ -1,12 +1,11 @@
 resource "azurerm_virtual_network" "main" {
-  name                = "vnet-main"
+  name                = "vnet-resource"
   address_space       = [var.vnet_cidr]
   location            = var.location
   resource_group_name = var.resource_group_name
-
   tags = {
-    Environment = var.environment
-    Service     = "network-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
@@ -21,39 +20,25 @@ resource "azurerm_subnet" "main" {
 }
 
 resource "azurerm_network_security_group" "main" {
-  name                = "nsg-main"
+  name                = "nsg-resource"
   location            = var.location
   resource_group_name = var.resource_group_name
-
-  security_rule {
-    name                       = "RDPAccess"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "3389"
-    source_address_prefix      = "*"
-    destination_address_prefix = "*"
-  }
-
   tags = {
-    Environment = var.environment
-    Service     = "nsg-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }
 }
 
 resource "azurerm_public_ip" "main" {
-  name                = "publicip-main"
+  name                = "publicip-resource"
   location            = var.location
   resource_group_name = var.resource_group_name
   allocation_method   = "Dynamic"
-
   tags = {
-    Environment = var.environment
-    Service     = "publicip-service"
+    Environment = "Dev"
+    Service     = "terraform-managed"
     ManagedBy   = "Terraform"
     CreatedDate = timestamp()
   }

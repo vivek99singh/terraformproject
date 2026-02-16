@@ -1,5 +1,5 @@
 resource "azurerm_network_interface" "main" {
-  name                = "nic-main"
+  name                = "nic-resource"
   location            = var.location
   resource_group_name = var.resource_group_name
 
@@ -12,7 +12,7 @@ resource "azurerm_network_interface" "main" {
 }
 
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "vm-main"
+  name                = "vm-resource"
   resource_group_name = var.resource_group_name
   location            = var.location
   size                = var.vm_size
@@ -37,13 +37,6 @@ resource "azurerm_windows_virtual_machine" "main" {
   boot_diagnostics {
     storage_account_uri = var.boot_diagnostics_storage_account_uri
   }
-
-  tags = {
-    Environment = var.environment
-    Service     = "vm-service"
-    ManagedBy   = "Terraform"
-    CreatedDate = timestamp()
-  }
 }
 
 resource "random_password" "admin" {
@@ -53,22 +46,15 @@ resource "random_password" "admin" {
 }
 
 resource "azurerm_managed_disk" "additional" {
-  name                 = "additionaldisk-main"
+  name                 = "additionaldisk-resource"
   location             = var.location
   resource_group_name  = var.resource_group_name
   storage_account_type = "Premium_LRS"
   create_option        = "Empty"
   disk_size_gb         = 256
-
-  tags = {
-    Environment = var.environment
-    Service     = "additional-disk"
-    ManagedBy   = "Terraform"
-    CreatedDate = timestamp()
-  }
 }
 
-resource "azurerm_virtual_machine_data_disk_attachment" "main" {
+resource "azurerm_virtual_machine_data_disk_attachment" "additional" {
   managed_disk_id    = azurerm_managed_disk.additional.id
   virtual_machine_id = azurerm_windows_virtual_machine.main.id
   lun                = 10
