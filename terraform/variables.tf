@@ -1,40 +1,38 @@
 variable "resource_group_name" {
-  type        = string
-  description = "The name of the resource group."
+  type    = string
+  default = "rg-vm-demo"
 }
 
 variable "location" {
-  type        = string
-  description = "The Azure region to deploy the resources."
-}
-
-variable "vnet_cidr" {
-  type        = string
-  description = "CIDR block for the virtual network."
-}
-
-variable "subnet_cidrs" {
-  type        = list(string)
-  description = "List of CIDR blocks for subnets."
-}
-
-variable "vm_size" {
-  type        = string
-  description = "The size of the VM."
-  default     = "Standard_D2s_v5"
-}
-
-variable "admin_username" {
-  type        = string
-  description = "Admin username for the VM."
-  default     = "adminuser"
+  type    = string
+  default = "eastus"
 }
 
 variable "tags" {
-  type    = map(string)
+  type = map(string)
   default = {
     Environment = "Dev"
     Service     = "terraform-managed"
     ManagedBy   = "Terraform"
   }
+}
+
+variable "vnet_cidr" {
+  type    = string
+  default = "10.0.0.0/16"
+}
+
+variable "subnet_cidrs" {
+  type    = list(string)
+  default = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "vm_size" {
+  type    = string
+  default = "Standard_D2s_v5"
+}
+
+variable "admin_username" {
+  type    = string
+  default = "adminuser"
 }

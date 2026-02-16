@@ -11,6 +11,6 @@ output "nic_id" {
 }
 
 output "admin_password" {
-  value     = random_password.password.result
+  value     = random_password.admin.result
   sensitive = true
 }
