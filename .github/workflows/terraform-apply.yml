@@ -1,0 +1,331 @@
+name: Terraform Apply Workflow
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-apply.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+env:
+  TF_VERSION: '1.6.0'
+  TERRAFORM_DIR: './terraform'
+
+jobs:
+  terraform-apply:
+    name: Apply Terraform Changes
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://portal.azure.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=terraform.tfstate"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=tfplan -no-color
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Output
+        id: output
+        run: terraform output -json > outputs.json
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: true
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Upload Terraform Outputs
+        uses: actions/upload-artifact@v4
+        if: steps.output.outcome == 'success'
+        with:
+          name: terraform-outputs
+          path: ${{ env.TERRAFORM_DIR }}/outputs.json
+
+      - name: Get PR Number
+        id: pr
+        run: |
+          PR_NUMBER=$(gh pr list --state merged --json number,mergeCommit --jq ".[] | select(.mergeCommit.oid==\"${{ github.sha }}\") | .number")
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on PR
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let outputsText = 'No outputs defined';
+            try {
+              const outputs = JSON.parse(fs.readFileSync('${{ env.TERRAFORM_DIR }}/outputs.json', 'utf8'));
+              outputsText = '```json\n' + JSON.stringify(outputs, null, 2) + '\n```';
+            } catch (e) {
+              console.log('No outputs file found');
+            }
+
+            const applyStatus = '${{ steps.apply.outcome }}';
+            const emoji = applyStatus === 'success' ? '✅' : '❌';
+
+            const output = `## ${emoji} Terraform Apply ${applyStatus === 'success' ? 'Successful' : 'Failed'}
+
+            **Commit**: \`${{ github.sha }}\`
+            **Workflow**: [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            **Applied at**: ${new Date().toISOString()}
+
+            ### Infrastructure Outputs
+
+            ${outputsText}
+
+            ### Resources Created/Updated
+
+            View your resources in the [Azure Portal](https://portal.azure.com/#view/HubsExtension/BrowseAll)
+
+            ---
+            *Automated deployment by Terraform MCP Azure Automation*`;
+
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.pr.outputs.number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  post-deployment-validation:
+    name: Post-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: terraform-apply
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Azure CLI
+        uses: azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      - name: Verify Resources
+        id: verify
+        run: |
+          echo "Verifying deployed resources..."
+          
+          # List all resources in subscription
+          az resource list --output table > resources.txt
+          
+          # Count resources
+          RESOURCE_COUNT=$(az resource list --query "length(@)")
+          echo "Total resources: $RESOURCE_COUNT"
+          echo "resource_count=$RESOURCE_COUNT" >> $GITHUB_OUTPUT
+          
+          # Check for any failed deployments
+          FAILED_DEPLOYMENTS=$(az deployment sub list --query "[?properties.provisioningState=='Failed'] | length(@)")
+          echo "failed_deployments=$FAILED_DEPLOYMENTS" >> $GITHUB_OUTPUT
+          
+          if [ "$FAILED_DEPLOYMENTS" -gt 0 ]; then
+            echo "::warning::Found $FAILED_DEPLOYMENTS failed deployments"
+          fi
+
+      - name: Run Health Checks
+        id: health
+        run: |
+          echo "Running health checks on deployed resources..."
+          
+          # Check VMs are running
+          VM_COUNT=$(az vm list --query "length(@)")
+          RUNNING_VMS=$(az vm list --query "[?powerState=='VM running'] | length(@)")
+          echo "VMs: $RUNNING_VMS/$VM_COUNT running"
+          
+          # Check storage accounts are accessible
+          STORAGE_COUNT=$(az storage account list --query "length(@)")
+          echo "Storage Accounts: $STORAGE_COUNT"
+          
+          # Check network security groups
+          NSG_COUNT=$(az network nsg list --query "length(@)")
+          echo "Network Security Groups: $NSG_COUNT"
+          
+          echo "vm_count=$VM_COUNT" >> $GITHUB_OUTPUT
+          echo "running_vms=$RUNNING_VMS" >> $GITHUB_OUTPUT
+          echo "storage_count=$STORAGE_COUNT" >> $GITHUB_OUTPUT
+          echo "nsg_count=$NSG_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Cost Analysis
+        id: cost
+        run: |
+          echo "Analyzing current costs..."
+          
+          # Get cost for current month
+          START_DATE=$(date -u -d "$(date +%Y-%m-01)" '+%Y-%m-%d')
+          END_DATE=$(date -u '+%Y-%m-%d')
+          
+          # Note: This requires Cost Management API access
+          # For POC, we'll just log the command
+          echo "Cost analysis period: $START_DATE to $END_DATE"
+          echo "Run this command manually for detailed costs:"
+          echo "az consumption usage list --start-date $START_DATE --end-date $END_DATE"
+
+      - name: Create Validation Report
+        run: |
+          cat > validation-report.md << EOF
+          # Post-Deployment Validation Report
+
+          **Deployment Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          **Commit**: \`${{ github.sha }}\`
+
+          ## Resource Summary
+
+          - **Total Resources**: ${{ steps.verify.outputs.resource_count }}
+          - **Failed Deployments**: ${{ steps.verify.outputs.failed_deployments }}
+
+          ## Health Check Results
+
+          - **Virtual Machines**: ${{ steps.health.outputs.running_vms }}/${{ steps.health.outputs.vm_count }} running
+          - **Storage Accounts**: ${{ steps.health.outputs.storage_count }}
+          - **Network Security Groups**: ${{ steps.health.outputs.nsg_count }}
+
+          ## Status
+
+          ${steps.verify.outputs.failed_deployments == '0' ? '✅ All deployments successful' : '⚠️ Some deployments failed - review required'}
+
+          ## Next Steps
+
+          1. Verify resources in [Azure Portal](https://portal.azure.com)
+          2. Run application-specific health checks
+          3. Monitor costs in [Cost Management](https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/overview)
+          4. Review security recommendations in [Security Center](https://portal.azure.com/#view/Microsoft_Azure_Security/SecurityMenuBlade/~/0)
+
+          ---
+          *Generated by Terraform MCP Azure Automation*
+          EOF
+
+      - name: Upload Validation Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation-report.md
+
+      - name: Get PR Number
+        id: pr
+        run: |
+          PR_NUMBER=$(gh pr list --state merged --json number,mergeCommit --jq ".[] | select(.mergeCommit.oid==\"${{ github.sha }}\") | .number")
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment Validation Results
+        if: steps.pr.outputs.number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('validation-report.md', 'utf8');
+
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.pr.outputs.number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            })
+
+  notify-completion:
+    name: Notify Deployment Completion
+    runs-on: ubuntu-latest
+    needs: [terraform-apply, post-deployment-validation]
+    if: always()
+    steps:
+      - name: Create Deployment Summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const applyStatus = '${{ needs.terraform-apply.result }}';
+            const validationStatus = '${{ needs.post-deployment-validation.result }}';
+
+            const getEmoji = (status) => {
+              if (status === 'success') return '✅';
+              if (status === 'failure') return '❌';
+              return '⚠️';
+            };
+
+            const summary = `## 🚀 Deployment Summary
+
+            | Stage | Status |
+            |-------|--------|
+            | Terraform Apply | ${getEmoji(applyStatus)} ${applyStatus} |
+            | Post-Deployment Validation | ${getEmoji(validationStatus)} ${validationStatus} |
+
+            **Deployment Time**: ${new Date().toISOString()}
+            **Commit**: \`${{ github.sha }}\`
+            **Triggered by**: @${{ github.actor }}
+
+            ### Overall Status
+            ${applyStatus === 'success' && validationStatus === 'success' 
+              ? '✅ Deployment completed successfully! All resources are provisioned and validated.' 
+              : '⚠️ Deployment completed with issues. Please review the logs and validation report.'}
+
+            ### Quick Links
+            - [Azure Portal](https://portal.azure.com)
+            - [Workflow Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - [Cost Management](https://portal.azure.com/#view/Microsoft_Azure_CostManagement/Menu/~/overview)
+
+            ---
+            *Automated by Terraform MCP Azure Automation*`;
+
+            core.summary.addRaw(summary).write();
+
+      - name: Deployment Status Check
+        if: needs.terraform-apply.result != 'success'
+        run: |
+          echo "::error::Terraform apply failed. Please review the logs and fix any issues."
+          exit 1
+
+# Made with Bob

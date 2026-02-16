@@ -1,0 +1,431 @@
+name: Terraform PR Workflow
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-pr.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+env:
+  TF_VERSION: '1.6.0'
+  TERRAFORM_DIR: './terraform'
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        id: fmt
+        run: terraform fmt -check -recursive
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=terraform.tfstate"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Comment Validation Results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+
+            <details><summary>Validation Output</summary>
+
+            \`\`\`
+            ${{ steps.validate.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Checkov
+        run: pip install checkov
+
+      - name: Run Checkov
+        id: checkov
+        run: |
+          checkov -d ${{ env.TERRAFORM_DIR }} \
+            --framework terraform \
+            --output cli \
+            --output json \
+            --output-file-path checkov-results \
+            --soft-fail
+        continue-on-error: true
+
+      - name: Setup tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: ${{ env.TERRAFORM_DIR }}
+          soft_fail: true
+          format: json
+          additional_args: --out tfsec-results.json
+
+      - name: Install Terrascan
+        run: |
+          curl -L "$(curl -s https://api.github.com/repos/tenable/terrascan/releases/latest | grep -o -E "https://.+?_Linux_x86_64.tar.gz")" > terrascan.tar.gz
+          tar -xf terrascan.tar.gz terrascan
+          sudo mv terrascan /usr/local/bin/
+          terrascan version
+
+      - name: Run Terrascan
+        id: terrascan
+        run: |
+          terrascan scan -t azure -d ${{ env.TERRAFORM_DIR }} \
+            -o json > terrascan-results.json
+        continue-on-error: true
+
+      - name: Parse Security Results
+        id: parse-security
+        run: |
+          # Create summary of all security findings
+          cat > security-summary.md << 'EOF'
+          ## 🔒 Security Scan Results
+
+          ### Checkov Results
+          EOF
+
+          if [ -f "checkov-results/results_cli.txt" ]; then
+            echo '```' >> security-summary.md
+            head -n 50 checkov-results/results_cli.txt >> security-summary.md
+            echo '```' >> security-summary.md
+          fi
+
+          echo "" >> security-summary.md
+          echo "### tfsec Results" >> security-summary.md
+          if [ -f "tfsec-results.json" ]; then
+            echo '```json' >> security-summary.md
+            jq '.results[] | {rule_id: .rule_id, severity: .severity, description: .description}' tfsec-results.json | head -n 30 >> security-summary.md
+            echo '```' >> security-summary.md
+          fi
+
+          echo "" >> security-summary.md
+          echo "### Terrascan Results" >> security-summary.md
+          if [ -f "terrascan-results.json" ]; then
+            echo '```json' >> security-summary.md
+            jq '.results.violations[] | {rule_name: .rule_name, severity: .severity, description: .description}' terrascan-results.json | head -n 30 >> security-summary.md
+            echo '```' >> security-summary.md
+          fi
+
+          # Count critical and high severity issues
+          CRITICAL_COUNT=0
+          HIGH_COUNT=0
+
+          if [ -f "checkov-results/results_json.json" ]; then
+            CHECKOV_FAILED=$(jq '.summary.failed' checkov-results/results_json.json)
+            CRITICAL_COUNT=$((CRITICAL_COUNT + CHECKOV_FAILED))
+          fi
+
+          if [ -f "tfsec-results.json" ]; then
+            TFSEC_CRITICAL=$(jq '[.results[] | select(.severity=="CRITICAL")] | length' tfsec-results.json)
+            TFSEC_HIGH=$(jq '[.results[] | select(.severity=="HIGH")] | length' tfsec-results.json)
+            CRITICAL_COUNT=$((CRITICAL_COUNT + TFSEC_CRITICAL))
+            HIGH_COUNT=$((HIGH_COUNT + TFSEC_HIGH))
+          fi
+
+          echo "CRITICAL_COUNT=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "HIGH_COUNT=$HIGH_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Upload Security Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            checkov-results/
+            tfsec-results.json
+            terrascan-results.json
+            security-summary.md
+
+      - name: Comment Security Results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('security-summary.md', 'utf8');
+            
+            const criticalCount = '${{ steps.parse-security.outputs.CRITICAL_COUNT }}';
+            const highCount = '${{ steps.parse-security.outputs.HIGH_COUNT }}';
+            
+            let statusEmoji = '✅';
+            let statusText = 'No critical issues found';
+            
+            if (parseInt(criticalCount) > 0) {
+              statusEmoji = '🚨';
+              statusText = `${criticalCount} critical issues found`;
+            } else if (parseInt(highCount) > 0) {
+              statusEmoji = '⚠️';
+              statusText = `${highCount} high severity issues found`;
+            }
+
+            const output = `${statusEmoji} **Security Scan Status**: ${statusText}
+
+            <details><summary>View Detailed Security Scan Results</summary>
+
+            ${summary}
+
+            </details>
+
+            **Action Required**: ${parseInt(criticalCount) > 0 ? '❌ Fix critical issues before merging' : '✅ Review findings and proceed'}
+
+            *Scanned with: Checkov, tfsec, Terrascan*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Fail on Critical Issues
+        if: steps.parse-security.outputs.CRITICAL_COUNT > 0
+        run: |
+          echo "::error::Found ${{ steps.parse-security.outputs.CRITICAL_COUNT }} critical security issues"
+          exit 1
+
+  cost-estimate:
+    name: Cost Estimation
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=terraform.tfstate"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -out=tfplan.binary -no-color
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Convert Plan to JSON
+        run: terraform show -json tfplan.binary > plan.json
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost JSON
+        run: |
+          infracost breakdown --path plan.json \
+            --format json \
+            --out-file infracost.json
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Post Infracost Comment
+        run: |
+          infracost comment github --path infracost.json \
+            --repo ${{ github.repository }} \
+            --github-token ${{ secrets.GITHUB_TOKEN }} \
+            --pull-request ${{ github.event.pull_request.number }} \
+            --behavior update
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Upload Cost Estimate
+        uses: actions/upload-artifact@v4
+        with:
+          name: cost-estimate
+          path: ${{ env.TERRAFORM_DIR }}/infracost.json
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [validate, security-scan, cost-estimate]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_STATE_CONTAINER }}" \
+            -backend-config="key=terraform.tfstate"
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        working-directory: ${{ env.TERRAFORM_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Save Plan Output
+        run: terraform show -no-color tfplan > plan-output.txt
+        working-directory: ${{ env.TERRAFORM_DIR }}
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: |
+            ${{ env.TERRAFORM_DIR }}/tfplan
+            ${{ env.TERRAFORM_DIR }}/plan-output.txt
+
+      - name: Comment Plan
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ env.TERRAFORM_DIR }}/plan-output.txt', 'utf8');
+            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '\n\n... (truncated)' : plan;
+
+            const output = `#### Terraform Plan 📖
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${truncatedPlan}
+            \`\`\`
+
+            </details>
+
+            *Plan generated at: ${new Date().toISOString()}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+  summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [validate, security-scan, cost-estimate, terraform-plan]
+    if: always()
+    steps:
+      - name: Create Summary Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const validationStatus = '${{ needs.validate.result }}';
+            const securityStatus = '${{ needs.security-scan.result }}';
+            const costStatus = '${{ needs.cost-estimate.result }}';
+            const planStatus = '${{ needs.terraform-plan.result }}';
+
+            const getEmoji = (status) => {
+              if (status === 'success') return '✅';
+              if (status === 'failure') return '❌';
+              return '⚠️';
+            };
+
+            const output = `## 📊 Terraform PR Workflow Summary
+
+            | Check | Status |
+            |-------|--------|
+            | Validation | ${getEmoji(validationStatus)} ${validationStatus} |
+            | Security Scan | ${getEmoji(securityStatus)} ${securityStatus} |
+            | Cost Estimate | ${getEmoji(costStatus)} ${costStatus} |
+            | Terraform Plan | ${getEmoji(planStatus)} ${planStatus} |
+
+            ### Next Steps
+            ${securityStatus === 'success' && planStatus === 'success' 
+              ? '✅ All checks passed! Ready for review and approval.' 
+              : '⚠️ Please review the failed checks above and make necessary corrections.'}
+
+            ---
+            *Automated by Terraform MCP Azure Automation*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+# Made with Bob
