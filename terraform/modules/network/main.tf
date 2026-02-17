@@ -7,11 +7,11 @@ resource "azurerm_virtual_network" "main" {
 }
 
 resource "azurerm_subnet" "main" {
-  for_each             = { for idx, cidr in var.subnet_cidrs : idx => cidr }
-  name                 = "subnet-${each.key}"
-  resource_group_name  = var.resource_group_name
+  for_each            = { for idx, cidr in var.subnet_cidrs : idx => cidr }
+  name                = "subnet-${each.key}"
+  resource_group_name = var.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [each.value]
+  address_prefixes    = [each.value]
 }
 
 resource "azurerm_network_security_group" "main" {
