@@ -1,5 +1,11 @@
 output "subnet_id" {
-  value = values(azurerm_subnet.main)[0].id
+  description = "ID of the first subnet"
+  value       = values(azurerm_subnet.main)[0].id
+}
+
+output "subnet_ids" {
+  description = "IDs of all subnets"
+  value       = [for s in azurerm_subnet.main : s.id]
 }
 
 output "nsg_id" {
@@ -12,4 +18,12 @@ output "public_ip_id" {
 
 output "public_ip_address" {
   value = azurerm_public_ip.main.ip_address
+}
+
+output "vnet_id" {
+  value = azurerm_virtual_network.main.id
+}
+
+output "vnet_name" {
+  value = azurerm_virtual_network.main.name
 }
