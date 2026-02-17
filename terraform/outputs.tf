@@ -1,19 +1,9 @@
 output "resource_group_name" {
-  value = azurerm_resource_group.main.name
+  value       = azurerm_resource_group.main.name
+  description = "Name of the resource group"
 }
 
-output "storage_account_primary_blob_endpoint" {
-  value = azurerm_storage_account.bootdiag.primary_blob_endpoint
-}
-
-output "vm_id" {
-  value = module.vm.vm_id
-}
-
-output "vm_name" {
-  value = module.vm.vm_name
-}
-
-output "public_ip_address" {
-  value = module.network.public_ip_address
+output "resource_group_location" {
+  value       = azurerm_resource_group.main.location
+  description = "Location of the resource group"
 }
