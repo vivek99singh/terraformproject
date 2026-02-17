@@ -38,7 +38,5 @@ module "vm" {
   vm_size                             = var.vm_size
   admin_username                      = var.admin_username
   tags                                = var.tags
-  public_ip_id                        = module.network.public_ip_id
-  nsg_id                              = module.network.nsg_id
   boot_diagnostics_storage_account_uri = azurerm_storage_account.bootdiag.primary_blob_endpoint
 }
