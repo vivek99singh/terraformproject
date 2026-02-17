@@ -1,19 +1,14 @@
-output "resource_group_name" {
-  value = azurerm_resource_group.main.name
+output "sql_server_id" {
+  value       = azurerm_mssql_server.main.id
+  description = "The ID of the created SQL Server"
 }
 
-output "storage_account_primary_blob_endpoint" {
-  value = azurerm_storage_account.bootdiag.primary_blob_endpoint
+output "sql_database_id" {
+  value       = azurerm_mssql_database.main.id
+  description = "The ID of the created SQL Database"
 }
 
-output "vm_id" {
-  value = module.vm.vm_id
-}
-
-output "vm_name" {
-  value = module.vm.vm_name
-}
-
-output "public_ip_address" {
-  value = module.network.public_ip_address
+output "sql_firewall_rule_id" {
+  value       = azurerm_mssql_firewall_rule.allow_specific_ip.id
+  description = "The ID of the SQL Firewall Rule allowing access from a specific IP"
 }
