@@ -29,13 +29,6 @@ resource "azurerm_mssql_database" "main" {
   tags                = var.tags
 }
 
-resource "azurerm_mssql_firewall_rule" "allow_ip" {
-  name      = "allow-specific-ip"
-  server_id = azurerm_mssql_server.main.id
-  start_ip_address = "89.27.102.166"
-  end_ip_address   = "89.27.102.166"
-}
-
 resource "azurerm_mssql_firewall_rule" "allow_azure_services" {
   name      = "allow-azure-services"
   server_id = azurerm_mssql_server.main.id
