@@ -1,34 +1,20 @@
 variable "resource_group_name" {
-  type = string
+  type        = string
+  description = "Name of the resource group"
 }
 
 variable "location" {
-  type = string
+  type        = string
+  description = "Azure region"
+  default     = "eastus"
 }
 
 variable "tags" {
-  type = map(string)
+  type        = map(string)
+  description = "Tags to apply to all resources"
   default = {
     Environment = "Dev"
     Service     = "terraform-managed"
     ManagedBy   = "Terraform"
   }
-}
-
-variable "vnet_cidr" {
-  type = string
-}
-
-variable "subnet_cidrs" {
-  type = list(string)
-}
-
-variable "vm_size" {
-  type = string
-  default = "Standard_B2s"
-}
-
-variable "admin_username" {
-  type = string
-  default = "adminuser"
 }
