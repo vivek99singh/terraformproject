@@ -11,9 +11,9 @@ variable "location" {
 variable "tags" {
   type        = map(string)
   description = "Tags to apply to all resources"
-  default = {
-    Environment = "Dev"
-    Service     = "terraform-managed"
-    ManagedBy   = "Terraform"
-  }
+}
+
+variable "allowed_ip_address" {
+  type        = string
+  description = "IP address allowed to access the SQL server"
 }
