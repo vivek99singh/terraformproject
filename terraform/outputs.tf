@@ -1,19 +1,20 @@
-output "resource_group_name" {
-  value = azurerm_resource_group.main.name
+output "sql_server_name" {
+  value       = azurerm_mssql_server.main.name
+  description = "Name of the SQL server"
 }
 
-output "storage_account_primary_blob_endpoint" {
-  value = azurerm_storage_account.bootdiag.primary_blob_endpoint
+output "sql_database_name" {
+  value       = azurerm_mssql_database.main.name
+  description = "Name of the SQL database"
 }
 
-output "vm_id" {
-  value = module.vm.vm_id
+output "sql_admin_login" {
+  value       = azurerm_mssql_server.main.administrator_login
+  description = "Administrator login for the SQL server"
 }
 
-output "vm_name" {
-  value = module.vm.vm_name
-}
-
-output "public_ip_address" {
-  value = module.network.public_ip_address
+output "sql_admin_password" {
+  value       = random_password.sql_admin_password.result
+  description = "Administrator password for the SQL server"
+  sensitive   = true
 }
