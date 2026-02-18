@@ -1,19 +1,11 @@
-output "resource_group_name" {
-  value = azurerm_resource_group.main.name
+output "sql_server_name" {
+  value = azurerm_mssql_server.main.name
 }
 
-output "storage_account_primary_blob_endpoint" {
-  value = azurerm_storage_account.bootdiag.primary_blob_endpoint
+output "sql_database_name" {
+  value = azurerm_mssql_database.main.name
 }
 
-output "vm_id" {
-  value = module.vm.vm_id
-}
-
-output "vm_name" {
-  value = module.vm.vm_name
-}
-
-output "public_ip_address" {
-  value = module.network.public_ip_address
+output "sql_server_fqdn" {
+  value = azurerm_mssql_server.main.fully_qualified_domain_name
 }
