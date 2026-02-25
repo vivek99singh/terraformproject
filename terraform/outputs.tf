@@ -1,25 +1,24 @@
-output "subnet_id" {
-  value       = module.network.subnet_id
-  description = "ID of the first subnet"
+output "resource_group_name" {
+  value       = module.resource_group.name
+  description = "The name of the resource group"
 }
 
-output "public_ip_id" {
-  value       = module.network.public_ip_id
-  description = "Public IP ID"
+output "vnet_id" {
+  value       = module.network.vnet_id
+  description = "The ID of the virtual network"
+}
+
+output "subnet_id" {
+  value       = module.network.subnet_id
+  description = "The ID of the first subnet"
 }
 
 output "vm_id" {
   value       = module.vm.vm_id
-  description = "ID of the virtual machine"
+  description = "The ID of the virtual machine"
 }
 
-output "vm_name" {
-  value       = module.vm.vm_name
-  description = "Name of the virtual machine"
-}
-
-output "admin_password" {
-  value       = module.vm.admin_password
-  description = "Admin password for the VM"
-  sensitive   = true
+output "public_ip_address" {
+  value       = module.network.public_ip_address
+  description = "The public IP address of the VM"
 }

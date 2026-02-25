@@ -33,7 +33,7 @@ variable "subnet_cidrs" {
 variable "vm_size" {
   type        = string
   description = "Size of the virtual machine"
-  default     = "Standard_D2s_v5"
+  default     = "Standard_B2s"
 }
 
 variable "admin_username" {
