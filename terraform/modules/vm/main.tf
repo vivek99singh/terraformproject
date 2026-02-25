@@ -2,13 +2,14 @@ resource "azurerm_network_interface" "main" {
   name                = "nic"
   location            = var.location
   resource_group_name = var.resource_group_name
+  tags                = var.tags
+
   ip_configuration {
     name                          = "internal"
     subnet_id                     = var.subnet_id
     private_ip_address_allocation = "Dynamic"
     public_ip_address_id          = var.public_ip_id
   }
-  tags = var.tags
 }
 
 resource "random_password" "admin" {
@@ -17,27 +18,31 @@ resource "random_password" "admin" {
 }
 
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "winvm"
-  location            = var.location
-  resource_group_name = var.resource_group_name
+  name                  = "vm"
+  location              = var.location
+  resource_group_name   = var.resource_group_name
   network_interface_ids = [azurerm_network_interface.main.id]
-  size                = var.vm_size
-  admin_username      = var.admin_username
-  admin_password      = random_password.admin.result
-  license_type        = "Windows_Server"
+  size                  = var.vm_size
+  admin_username        = var.admin_username
+  admin_password        = random_password.admin.result
+  license_type          = "Windows_Server"
+
   os_disk {
     caching              = "ReadWrite"
     storage_account_type = "Standard_LRS"
   }
+
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
     sku       = "2022-Datacenter"
     version   = "latest"
   }
+
   boot_diagnostics {
     storage_account_uri = var.boot_diagnostics_storage_account_uri
   }
+
   tags = var.tags
 }
 

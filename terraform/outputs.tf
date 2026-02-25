@@ -3,14 +3,14 @@ output "resource_group_name" {
   description = "The name of the resource group"
 }
 
-output "network_vnet_id" {
+output "vnet_id" {
   value       = module.network.vnet_id
   description = "The ID of the virtual network"
 }
 
-output "network_subnet_ids" {
-  value       = module.network.subnet_ids
-  description = "The IDs of the subnets"
+output "subnet_id" {
+  value       = module.network.subnet_id
+  description = "The ID of the first subnet"
 }
 
 output "vm_id" {
@@ -18,7 +18,7 @@ output "vm_id" {
   description = "The ID of the virtual machine"
 }
 
-output "vm_public_ip" {
+output "public_ip_address" {
   value       = module.network.public_ip_address
-  description = "The public IP address of the virtual machine"
+  description = "The public IP address of the VM"
 }
