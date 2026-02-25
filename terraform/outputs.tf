@@ -1,9 +1,14 @@
-output "sql_server_id" {
-  value       = module.azure_sql.sql_server_id
-  description = "ID of the SQL Server"
+output "vm_id" {
+  value       = module.vm.vm_id
+  description = "ID of the virtual machine"
 }
 
-output "sql_database_id" {
-  value       = module.azure_sql.sql_database_id
-  description = "ID of the SQL Database"
+output "public_ip_address" {
+  value       = module.network.public_ip_address
+  description = "Public IP address of the VM"
+}
+
+output "storage_account_uri" {
+  value       = module.storage.primary_blob_endpoint
+  description = "Primary Blob Endpoint of the storage account"
 }
