@@ -5,10 +5,10 @@ output "subnet_id" {
 
 output "public_ip_id" {
   value       = azurerm_public_ip.main.id
-  description = "ID of the public IP"
+  description = "Public IP ID"
 }
 
 output "nsg_id" {
   value       = azurerm_network_security_group.main.id
-  description = "ID of the network security group"
+  description = "Network Security Group ID"
 }

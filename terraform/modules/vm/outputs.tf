@@ -10,11 +10,11 @@ output "vm_name" {
 
 output "nic_id" {
   value       = azurerm_network_interface.main.id
-  description = "ID of the network interface"
+  description = "Network Interface ID"
 }
 
 output "admin_password" {
   value       = random_password.admin.result
-  sensitive   = true
   description = "Admin password for the VM"
+  sensitive   = true
 }
