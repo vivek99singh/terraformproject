@@ -1,9 +1,14 @@
-output "sql_server_id" {
-  value       = module.azure_sql.sql_server_id
-  description = "ID of the SQL Server"
+output "subnet_id" {
+  value       = module.network.subnet_id
+  description = "ID of the first subnet"
 }
 
-output "sql_database_id" {
-  value       = module.azure_sql.sql_database_id
-  description = "ID of the SQL Database"
+output "public_ip_id" {
+  value       = module.network.public_ip_id
+  description = "ID of the public IP"
+}
+
+output "vm_id" {
+  value       = module.vm.vm_id
+  description = "ID of the virtual machine"
 }
