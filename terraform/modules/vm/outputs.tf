@@ -15,6 +15,6 @@ output "nic_id" {
 
 output "admin_password" {
   value       = random_password.admin.result
-  description = "The admin password for the virtual machine"
+  description = "The admin password for the VM"
   sensitive   = true
 }

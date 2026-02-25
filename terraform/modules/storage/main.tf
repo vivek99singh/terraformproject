@@ -1,5 +1,5 @@
 resource "azurerm_storage_account" "main" {
-  name                     = "diagstorage${random_string.storage_suffix.result}"
+  name                     = "diagstorage${random_string.suffix.result}"
   resource_group_name      = var.resource_group_name
   location                 = var.location
   account_tier             = "Standard"
@@ -7,8 +7,8 @@ resource "azurerm_storage_account" "main" {
   tags                     = var.tags
 }
 
-resource "random_string" "storage_suffix" {
-  length  = 8
+resource "random_string" "suffix" {
+  length  = 6
   special = false
   upper   = false
 }
