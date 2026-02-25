@@ -21,8 +21,8 @@ resource "azurerm_network_security_group" "main" {
   tags                = var.tags
 
   security_rule {
-    name                       = "Allow-RDP"
-    priority                   = 1000
+    name                       = "allow_rdp"
+    priority                   = 100
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"

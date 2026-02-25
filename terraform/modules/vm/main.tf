@@ -45,7 +45,7 @@ resource "azurerm_windows_virtual_machine" "main" {
   tags = var.tags
 }
 
-resource "azurerm_managed_disk" "data" {
+resource "azurerm_managed_disk" "data_disk" {
   name                 = "data-disk"
   location             = var.location
   resource_group_name  = var.resource_group_name
@@ -55,8 +55,8 @@ resource "azurerm_managed_disk" "data" {
   tags                 = var.tags
 }
 
-resource "azurerm_virtual_machine_data_disk_attachment" "data" {
-  managed_disk_id    = azurerm_managed_disk.data.id
+resource "azurerm_virtual_machine_data_disk_attachment" "data_disk" {
+  managed_disk_id    = azurerm_managed_disk.data_disk.id
   virtual_machine_id = azurerm_windows_virtual_machine.main.id
   lun                = 0
   caching    = "ReadWrite"
