@@ -35,8 +35,8 @@ resource "azurerm_mssql_database" "main" {
 }
 
 resource "azurerm_mssql_firewall_rule" "allow_specific_ip" {
-  name             = "AllowSpecificIP"
-  server_id        = azurerm_mssql_server.main.id
+  name      = "allow-specific-ip"
+  server_id = azurerm_mssql_server.main.id
   start_ip_address = "129.41.46.1"
   end_ip_address   = "129.41.46.1"
 }
