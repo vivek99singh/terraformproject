@@ -10,7 +10,7 @@ output "vm_name" {
 
 output "nic_id" {
   value       = azurerm_network_interface.main.id
-  description = "Network Interface ID"
+  description = "ID of the network interface"
 }
 
 output "admin_password" {
