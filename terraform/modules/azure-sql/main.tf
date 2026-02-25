@@ -29,14 +29,14 @@ resource "azurerm_mssql_server" "main" {
 resource "azurerm_mssql_database" "main" {
   name      = "sqldb-${random_string.server_suffix.result}"
   server_id = azurerm_mssql_server.main.id
-  sku_name  = "Basic"
+  sku_name  = "S0"
   tags      = var.tags
   transparent_data_encryption_enabled = true
 }
 
 resource "azurerm_mssql_firewall_rule" "allow_specific_ip" {
-  name             = "AllowSpecificIP"
-  server_id        = azurerm_mssql_server.main.id
+  name      = "allow-specific-ip"
+  server_id = azurerm_mssql_server.main.id
   start_ip_address = "129.41.46.1"
   end_ip_address   = "129.41.46.1"
 }
