@@ -45,3 +45,12 @@ variable "boot_diagnostics_storage_account_uri" {
   default     = null
   description = "Storage account URI for boot diagnostics (optional, pass only if storage account is created)"
 }
+
+variable "additional_disks" {
+  type        = list(object({
+    size = number
+    type = string
+  }))
+  description = "List of additional managed disks to attach to the VM"
+  default     = []
+}
