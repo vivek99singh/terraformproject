@@ -15,14 +15,14 @@ module "storage" {
 }
 
 module "vm" {
-  source                             = "./modules/vm"
-  resource_group_name                = module.resource_group.name
-  location                           = module.resource_group.location
-  subnet_id                          = module.network.subnet_id
-  vm_size                            = var.vm_size
-  admin_username                     = var.admin_username
-  tags                               = var.tags
-  public_ip_id                       = module.network.public_ip_id
-  nsg_id                             = module.network.nsg_id
+  source                               = "./modules/vm"
+  resource_group_name                  = module.resource_group.name
+  location                             = module.resource_group.location
+  subnet_id                            = module.network.subnet_id
+  vm_size                              = var.vm_size
+  admin_username                       = var.admin_username
+  tags                                 = var.tags
+  public_ip_id                         = module.network.public_ip_id
+  nsg_id                               = module.network.nsg_id
   boot_diagnostics_storage_account_uri = module.storage.primary_blob_endpoint
 }

@@ -21,7 +21,7 @@ variable "tags" {
 variable "vnet_cidr" {
   type        = string
   description = "CIDR block for VNet"
-  default     = "10.0.0.0/16"
+  default     = "/16"
 }
 
 variable "subnet_cidrs" {
