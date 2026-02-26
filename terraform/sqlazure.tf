@@ -1,6 +1,6 @@
 module "azure_sql" {
   source              = "./modules/azure-sql"
-  resource_group_name = var.resource_group_name
-  location            = var.location
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
   tags                = var.tags
 }
