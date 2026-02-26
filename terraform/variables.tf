@@ -1,11 +1,13 @@
 variable "resource_group_name" {
   type        = string
   description = "Name of the resource group"
+  default     = "rgwindows"
 }
 
 variable "location" {
   type        = string
   description = "Azure region"
+  default     = "southindia"
 }
 
 variable "tags" {
@@ -34,6 +36,12 @@ variable "vm_size" {
   type        = string
   description = "Size of the virtual machine"
   default     = "Standard_B2s"
+}
+
+variable "vm_name" {
+  type        = string
+  description = "Name of the virtual machine"
+  default     = "vivekvm"
 }
 
 variable "admin_username" {
