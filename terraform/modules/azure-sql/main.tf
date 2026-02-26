@@ -9,16 +9,10 @@ resource "random_password" "admin_password" {
   special = true
 }
 
-resource "azurerm_resource_group" "main" {
-  name     = var.resource_group_name
-  location = var.location
-  tags     = var.tags
-}
-
 resource "azurerm_mssql_server" "main" {
   name                         = "mssqlserver${random_string.server_suffix.result}"
-  resource_group_name          = azurerm_resource_group.main.name
-  location                     = azurerm_resource_group.main.location
+  resource_group_name          = var.resource_group_name
+  location                     = var.location
   version                      = "12.0"
   administrator_login          = "sqladmin"
   administrator_login_password = random_password.admin_password.result
