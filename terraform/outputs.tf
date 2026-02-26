@@ -3,22 +3,22 @@ output "resource_group_name" {
   description = "The name of the resource group"
 }
 
-output "vnet_id" {
-  value       = module.network.vnet_id
-  description = "ID of the virtual network"
-}
-
-output "subnet_id" {
-  value       = module.network.subnet_id
-  description = "ID of the first subnet"
-}
-
 output "vm_id" {
   value       = module.vm.vm_id
   description = "ID of the virtual machine"
 }
 
 output "public_ip_address" {
-  value       = module.network.public_ip_address
-  description = "Public IP address of the VM"
+  value       = module.vm.public_ip_address
+  description = "Public IP address of the virtual machine"
+}
+
+output "subnet_ids" {
+  value       = module.network.subnet_ids
+  description = "IDs of all subnets"
+}
+
+output "storage_account_uri" {
+  value       = module.storage.primary_blob_endpoint
+  description = "Primary blob endpoint of the storage account"
 }

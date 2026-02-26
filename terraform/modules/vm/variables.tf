@@ -13,25 +13,27 @@ variable "subnet_id" {
   description = "ID of the subnet for the VM NIC"
 }
 
-variable "vm_size" {
-  type        = string
-  description = "Size of the VM"
-}
-
-variable "admin_username" {
-  type        = string
-  description = "Admin username for the VM"
-}
-
 variable "tags" {
   type        = map(string)
   description = "Tags to apply to all resources"
 }
 
-variable "public_ip_id" {
+variable "vm_name" {
   type        = string
-  default     = null
-  description = "Public IP ID (optional, pass only if public IP is created)"
+  default     = "winvm"
+  description = "Name of the VM. NIC and PIP names are derived: vm_name-nic, vm_name-pip"
+}
+
+variable "vm_size" {
+  type        = string
+  default     = "Standard_B2s"
+  description = "Size of the VM"
+}
+
+variable "admin_username" {
+  type        = string
+  default     = "adminuser"
+  description = "Admin username for the VM"
 }
 
 variable "nsg_id" {
@@ -46,23 +48,8 @@ variable "boot_diagnostics_storage_account_uri" {
   description = "Storage account URI for boot diagnostics (optional, pass only if storage account is created)"
 }
 
-variable "os_disk_type" {
-  type        = string
-  default     = "Standard_LRS"
-  description = "Type of the OS disk"
-}
-
-variable "os_disk_size_gb" {
-  type        = number
-  default     = 256
-  description = "Size of the OS disk in GB"
-}
-
 variable "additional_disks" {
-  type = list(object({
-    size = number
-    type = string
-  }))
-  default     = []
-  description = "List of additional managed disks to attach"
+  type        = list(object({ size = number, type = string }))
+  default     = [{ size = 256, type = "Managed" }]
+  description = "List of additional managed disks to attach to the VM"
 }
