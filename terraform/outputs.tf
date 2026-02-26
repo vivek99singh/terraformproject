@@ -8,17 +8,12 @@ output "network_vnet_id" {
   description = "The ID of the virtual network"
 }
 
-output "network_subnet_ids" {
-  value       = module.network.subnet_ids
-  description = "The IDs of the subnets"
-}
-
 output "vm_id" {
   value       = module.vm.vm_id
   description = "The ID of the virtual machine"
 }
 
-output "vm_public_ip" {
+output "public_ip_address" {
   value       = module.network.public_ip_address
-  description = "The public IP address of the virtual machine"
+  description = "The public IP address of the VM"
 }
