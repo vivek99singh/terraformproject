@@ -1,23 +1,32 @@
+resource "random_password" "admin" {
+  length  = 16
+  special = true
+}
+
+resource "azurerm_public_ip" "main" {
+  name                = "${var.vm_name}-pip"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = var.tags
+}
+
 resource "azurerm_network_interface" "main" {
-  name                = "nic"
+  name                = "${var.vm_name}-nic"
   location            = var.location
   resource_group_name = var.resource_group_name
   ip_configuration {
     name                          = "internal"
     subnet_id                     = var.subnet_id
     private_ip_address_allocation = "Dynamic"
-    public_ip_address_id          = var.public_ip_id
+    public_ip_address_id          = azurerm_public_ip.main.id
   }
   tags = var.tags
 }
 
-resource "random_password" "admin" {
-  length  = 16
-  special = true
-}
-
 resource "azurerm_windows_virtual_machine" "main" {
-  name                = "winvm"
+  name                = var.vm_name
   location            = var.location
   resource_group_name = var.resource_group_name
   size                = var.vm_size
@@ -26,8 +35,8 @@ resource "azurerm_windows_virtual_machine" "main" {
   network_interface_ids = [azurerm_network_interface.main.id]
   os_disk {
     caching              = "ReadWrite"
-    storage_account_type = var.os_disk_type
-    disk_size_gb         = var.os_disk_size_gb
+    storage_account_type = "Standard_LRS"
+    disk_size_gb         = 256
   }
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
@@ -42,20 +51,18 @@ resource "azurerm_windows_virtual_machine" "main" {
 }
 
 resource "azurerm_managed_disk" "data" {
-  count                = length(var.additional_disks)
-  name                 = "datadisk-${count.index}"
+  name                 = "${var.vm_name}-datadisk"
   location             = var.location
   resource_group_name  = var.resource_group_name
-  storage_account_type = var.additional_disks[count.index].type
-  disk_size_gb         = var.additional_disks[count.index].size
+  storage_account_type = "Standard_LRS"
+  create_option        = "Empty"
+  disk_size_gb         = 256
   tags                 = var.tags
-  create_option  = "Empty"
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "data" {
-  count               = length(var.additional_disks)
-  managed_disk_id     = azurerm_managed_disk.data[count.index].id
-  virtual_machine_id  = azurerm_windows_virtual_machine.main.id
-  lun                 = count.index
+  managed_disk_id    = azurerm_managed_disk.data.id
+  virtual_machine_id = azurerm_windows_virtual_machine.main.id
+  lun                = 0
   caching    = "ReadWrite"
 }
