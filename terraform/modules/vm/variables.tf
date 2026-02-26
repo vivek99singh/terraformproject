@@ -46,23 +46,8 @@ variable "boot_diagnostics_storage_account_uri" {
   description = "Storage account URI for boot diagnostics (optional, pass only if storage account is created)"
 }
 
-variable "os_disk_type" {
-  type        = string
-  default     = "Standard_LRS"
-  description = "Type of the OS disk"
-}
-
-variable "os_disk_size_gb" {
-  type        = number
-  default     = 256
-  description = "Size of the OS disk in GB"
-}
-
 variable "additional_disks" {
-  type = list(object({
-    size = number
-    type = string
-  }))
+  type        = list(object({ size = number, type = string }))
+  description = "List of additional managed disks to attach to the VM"
   default     = []
-  description = "List of additional managed disks to attach"
 }

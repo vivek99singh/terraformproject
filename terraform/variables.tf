@@ -1,11 +1,13 @@
 variable "resource_group_name" {
   type        = string
   description = "Name of the resource group"
+  default     = "rgwindows"
 }
 
 variable "location" {
   type        = string
   description = "Azure region"
+  default     = "southindia"
 }
 
 variable "tags" {
